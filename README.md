@@ -247,7 +247,7 @@ authoritative regression for the exact five-pixel, one-movement behavior.
 
 ## Development
 
-The supported Rust version is 1.85 or newer. The final validation matrix is:
+The supported Rust version is 1.98 or newer. The final validation matrix is:
 
 ```console
 cargo fmt --all -- --check

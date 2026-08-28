@@ -168,25 +168,25 @@ fn draw_diagnostic(
     if let Some(bounds) = difference.actual_bounds {
         rectangle(diff, bounds, color, false);
     }
-    if difference.kind == DifferenceKind::Moved {
-        if let (Some(expected_bounds), Some(actual_bounds), Some(offset)) = (
+    if difference.kind == DifferenceKind::Moved
+        && let (Some(expected_bounds), Some(actual_bounds), Some(offset)) = (
             difference.expected_bounds,
             difference.actual_bounds,
             difference.offset,
-        ) {
-            let start = expected_bounds.center();
-            let end = actual_bounds.center();
-            arrow(diff, start, end, color);
-            let label = format!("{} DX{:+} DY{:+}", difference.id, offset.x, offset.y);
-            text(
-                diff,
-                start.0.saturating_add(end.0) / 2,
-                start.1.saturating_add(end.1) / 2,
-                &label,
-                color,
-            );
-            return;
-        }
+        )
+    {
+        let start = expected_bounds.center();
+        let end = actual_bounds.center();
+        arrow(diff, start, end, color);
+        let label = format!("{} DX{:+} DY{:+}", difference.id, offset.x, offset.y);
+        text(
+            diff,
+            start.0.saturating_add(end.0) / 2,
+            start.1.saturating_add(end.1) / 2,
+            &label,
+            color,
+        );
+        return;
     }
     let bounds = difference.expected_bounds.or(difference.actual_bounds);
     if let Some(bounds) = bounds {
