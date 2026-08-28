@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::pyramid::{ImagePyramid, PyramidLevel};
 use crate::{Alignment, Offset};
 
@@ -151,6 +153,7 @@ fn refine_hypotheses(
 ) -> HypothesisSet {
     let (x_limit, y_limit) = offset_limits(expected, actual, requested_limit);
     let mut result = HypothesisSet::new();
+    let mut score_cache = HashMap::new();
     for hypothesis in previous.entries.into_iter().flatten() {
         let center = Offset {
             x: hypothesis.offset.x.saturating_mul(2),
@@ -162,7 +165,10 @@ fn refine_hypotheses(
                     x: center.x.saturating_add(delta_x).clamp(-x_limit, x_limit),
                     y: center.y.saturating_add(delta_y).clamp(-y_limit, y_limit),
                 };
-                consider_scored(expected, actual, candidate, 3, &mut result);
+                let candidate_score = *score_cache
+                    .entry((candidate.x, candidate.y))
+                    .or_insert_with(|| score(expected, actual, candidate));
+                consider_score(candidate, candidate_score, 3, &mut result);
             }
         }
     }
@@ -176,7 +182,21 @@ fn consider_scored(
     distinct_distance: u64,
     hypotheses: &mut HypothesisSet,
 ) {
-    if let Some(candidate_score) = score(expected, actual, offset) {
+    consider_score(
+        offset,
+        score(expected, actual, offset),
+        distinct_distance,
+        hypotheses,
+    );
+}
+
+fn consider_score(
+    offset: Offset,
+    candidate_score: Option<f64>,
+    distinct_distance: u64,
+    hypotheses: &mut HypothesisSet,
+) {
+    if let Some(candidate_score) = candidate_score {
         hypotheses.consider(
             Hypothesis {
                 offset,
