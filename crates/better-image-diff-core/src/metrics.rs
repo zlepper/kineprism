@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::MetricSet;
 use crate::color::NormalizedImage;
 use crate::mapping::PixelMapping;
@@ -123,6 +125,7 @@ fn window_ssim(
     let mut expected_squared = 0.0;
     let mut actual_squared = 0.0;
     let mut product_sum = 0.0;
+    let gaussian_weights = gaussian_weights();
 
     for delta_y in -SSIM_RADIUS..=SSIM_RADIUS {
         let y = i64::from(center_y) + i64::from(delta_y);
@@ -141,7 +144,7 @@ fn window_ssim(
             };
             let expected_value = expected.pixel(x, y).channel(channel);
             let actual_value = actual.pixel_by_index(actual_index).channel(channel);
-            let weight = gaussian_weight(delta_x, delta_y);
+            let weight = gaussian_weights[gaussian_index(delta_x, delta_y)];
             weight_sum += weight;
             expected_sum += weight * expected_value;
             actual_sum += weight * actual_value;
@@ -167,6 +170,26 @@ fn window_ssim(
     } else {
         numerator / denominator
     })
+}
+
+fn gaussian_weights() -> &'static [f64; SSIM_WINDOW_SIZE as usize * SSIM_WINDOW_SIZE as usize] {
+    static WEIGHTS: OnceLock<[f64; SSIM_WINDOW_SIZE as usize * SSIM_WINDOW_SIZE as usize]> =
+        OnceLock::new();
+    WEIGHTS.get_or_init(|| {
+        std::array::from_fn(|index| {
+            let x = index % SSIM_WINDOW_SIZE as usize;
+            let y = index / SSIM_WINDOW_SIZE as usize;
+            let delta_x = i32::try_from(x).expect("SSIM window x") - SSIM_RADIUS;
+            let delta_y = i32::try_from(y).expect("SSIM window y") - SSIM_RADIUS;
+            gaussian_weight(delta_x, delta_y)
+        })
+    })
+}
+
+fn gaussian_index(delta_x: i32, delta_y: i32) -> usize {
+    let x = usize::try_from(delta_x + SSIM_RADIUS).expect("SSIM weight x");
+    let y = usize::try_from(delta_y + SSIM_RADIUS).expect("SSIM weight y");
+    y * SSIM_WINDOW_SIZE as usize + x
 }
 
 fn gaussian_weight(delta_x: i32, delta_y: i32) -> f64 {
