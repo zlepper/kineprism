@@ -26,6 +26,16 @@ impl PyramidLevel {
     pub(crate) fn feature(&self, x: u32, y: u32) -> Feature {
         self.features[index(self.width, x, y)]
     }
+
+    pub(crate) fn row(&self, y: u32) -> &[Feature] {
+        let start = index(self.width, 0, y);
+        let end = start
+            .checked_add(usize::try_from(self.width).expect("pyramid width fits usize"))
+            .expect("validated pyramid row");
+        self.features
+            .get(start..end)
+            .expect("validated pyramid row")
+    }
 }
 
 #[derive(Debug, Clone)]

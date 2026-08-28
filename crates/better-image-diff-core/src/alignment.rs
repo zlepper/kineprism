@@ -216,14 +216,18 @@ fn score(expected: &PyramidLevel, actual: &PyramidLevel, offset: Offset) -> Opti
     if overlap_area.saturating_mul(4) < reference_area {
         return None;
     }
+    let expected_start = usize::try_from(overlap.x).ok()?;
+    let actual_start = usize::try_from(i64::from(overlap.x) + i64::from(offset.x)).ok()?;
+    let row_width = usize::try_from(overlap.width).ok()?;
+    let expected_end = expected_start.checked_add(row_width)?;
+    let actual_end = actual_start.checked_add(row_width)?;
     let mut error = 0.0_f64;
     let mut weight_sum = 0.0_f64;
     for y in overlap.y..overlap.y + overlap.height {
-        for x in overlap.x..overlap.x + overlap.width {
-            let actual_x = u32::try_from(i64::from(x) + i64::from(offset.x)).ok()?;
-            let actual_y = u32::try_from(i64::from(y) + i64::from(offset.y)).ok()?;
-            let left = expected.feature(x, y);
-            let right = actual.feature(actual_x, actual_y);
+        let actual_y = u32::try_from(i64::from(y) + i64::from(offset.y)).ok()?;
+        let expected_features = expected.row(y).get(expected_start..expected_end)?;
+        let actual_features = actual.row(actual_y).get(actual_start..actual_end)?;
+        for (left, right) in expected_features.iter().zip(actual_features) {
             let edge_weight = f64::from(left.edge.max(right.edge));
             let weight = 0.15 + edge_weight * 6.0;
             let color_error = left
