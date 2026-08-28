@@ -213,8 +213,8 @@ fn score(expected: &PyramidLevel, actual: &PyramidLevel, offset: Offset) -> Opti
                 .map(|(a, b)| f64::from((*a - b).abs()))
                 .sum::<f64>()
                 / 4.0;
-            error += weight
-                * color_error.mul_add(50.0, f64::from((left.edge - right.edge).abs()) * 20.0);
+            error +=
+                weight * (color_error * 50.0 + f64::from((left.edge - right.edge).abs()) * 20.0);
             weight_sum += weight;
         }
     }
