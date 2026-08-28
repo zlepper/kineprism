@@ -28,11 +28,11 @@ impl Bounds {
         let y = self.y.max(other.y);
         let right = self.right().min(other.right());
         let bottom = self.bottom().min(other.bottom());
-        (right > x && bottom > y).then_some(Self {
+        (right > x && bottom > y).then(|| Self {
             x,
             y,
-            width: right - x,
-            height: bottom - y,
+            width: right.saturating_sub(x),
+            height: bottom.saturating_sub(y),
         })
     }
 
@@ -52,7 +52,7 @@ impl Bounds {
         let clipped_top = top.clamp(0, i64::from(canvas_height));
         let clipped_right = right.clamp(0, i64::from(canvas_width));
         let clipped_bottom = bottom.clamp(0, i64::from(canvas_height));
-        (clipped_right > clipped_left && clipped_bottom > clipped_top).then_some(Self {
+        (clipped_right > clipped_left && clipped_bottom > clipped_top).then(|| Self {
             x: clamped_u32(clipped_left),
             y: clamped_u32(clipped_top),
             width: clamped_u32(clipped_right - clipped_left),

@@ -1,7 +1,15 @@
 use crate::color::NormalizedImage;
-use crate::{CompareError, Offset};
+use crate::{Bounds, CompareError, Offset};
 
 const UNMAPPED: u64 = u64::MAX;
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct MovementMapping {
+    pub(crate) bounds: Bounds,
+    pub(crate) offset: Offset,
+    pub(crate) confidence: f64,
+    pub(crate) order: usize,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct PixelMapping {
@@ -86,6 +94,112 @@ impl PixelMapping {
 
     pub(crate) fn dimensions(&self) -> (u32, u32) {
         (self.expected_width, self.expected_height)
+    }
+
+    pub(crate) fn structural(
+        expected: &NormalizedImage,
+        actual: &NormalizedImage,
+        global_offset: Offset,
+        movements: &[MovementMapping],
+    ) -> Result<Self, CompareError> {
+        let expected_area =
+            usize::try_from(u64::from(expected.width()) * u64::from(expected.height()))
+                .map_err(|_error| CompareError::ImageTooLarge)?;
+        let actual_area = usize::try_from(u64::from(actual.width()) * u64::from(actual.height()))
+            .map_err(|_error| CompareError::ImageTooLarge)?;
+        let mut actual_indices = Vec::new();
+        actual_indices
+            .try_reserve_exact(expected_area)
+            .map_err(|_error| CompareError::ImageTooLarge)?;
+        actual_indices.resize(expected_area, UNMAPPED);
+        let mut actual_used = Vec::new();
+        actual_used
+            .try_reserve_exact(actual_area)
+            .map_err(|_error| CompareError::ImageTooLarge)?;
+        actual_used.resize(actual_area, false);
+        let mut compared_pixels = 0_u64;
+
+        let mut ordered_movements: Vec<_> = movements.iter().collect();
+        ordered_movements.sort_by(|left, right| {
+            right
+                .confidence
+                .total_cmp(&left.confidence)
+                .then_with(|| left.order.cmp(&right.order))
+        });
+        for movement in ordered_movements {
+            map_bounds(
+                expected,
+                actual,
+                movement.bounds,
+                movement.offset,
+                &mut actual_indices,
+                &mut actual_used,
+                &mut compared_pixels,
+            );
+        }
+        let full = Bounds {
+            x: 0,
+            y: 0,
+            width: expected.width(),
+            height: expected.height(),
+        };
+        map_bounds(
+            expected,
+            actual,
+            full,
+            global_offset,
+            &mut actual_indices,
+            &mut actual_used,
+            &mut compared_pixels,
+        );
+
+        Ok(Self {
+            expected_width: expected.width(),
+            expected_height: expected.height(),
+            actual_indices,
+            compared_pixels,
+        })
+    }
+}
+
+fn map_bounds(
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+    bounds: Bounds,
+    offset: Offset,
+    actual_indices: &mut [u64],
+    actual_used: &mut [bool],
+    compared_pixels: &mut u64,
+) {
+    for expected_y in bounds.y..bounds.bottom().min(expected.height()) {
+        for expected_x in bounds.x..bounds.right().min(expected.width()) {
+            let expected_index = expected.index(expected_x, expected_y);
+            if actual_indices[expected_index] != UNMAPPED {
+                continue;
+            }
+            let actual_x = i64::from(expected_x) + i64::from(offset.x);
+            let actual_y = i64::from(expected_y) + i64::from(offset.y);
+            if actual_x < 0
+                || actual_y < 0
+                || actual_x >= i64::from(actual.width())
+                || actual_y >= i64::from(actual.height())
+            {
+                continue;
+            }
+            let Ok(actual_x) = u32::try_from(actual_x) else {
+                continue;
+            };
+            let Ok(actual_y) = u32::try_from(actual_y) else {
+                continue;
+            };
+            let actual_index = actual.index(actual_x, actual_y);
+            if actual_used[actual_index] {
+                continue;
+            }
+            actual_used[actual_index] = true;
+            actual_indices[expected_index] = u64::try_from(actual_index).unwrap_or(UNMAPPED);
+            *compared_pixels += 1;
+        }
     }
 }
 

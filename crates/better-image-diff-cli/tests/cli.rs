@@ -124,7 +124,7 @@ fn meaningful_differences_exit_one() {
     assert_eq!(output.status.code(), Some(1), "{:?}", output.stderr);
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
     assert_eq!(report["equivalent"], false);
-    assert!(report["summary"]["changed"].as_u64().unwrap() >= 1);
+    assert!(report["summary"]["total"].as_u64().unwrap() >= 1);
 }
 
 #[test]

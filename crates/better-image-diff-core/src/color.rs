@@ -9,6 +9,10 @@ pub(crate) struct NormalizedPixel {
 }
 
 impl NormalizedPixel {
+    pub(crate) fn channel_f32(self, index: usize) -> f32 {
+        self.channels[index]
+    }
+
     pub(crate) fn channel(self, index: usize) -> f64 {
         f64::from(self.channels[index])
     }

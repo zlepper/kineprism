@@ -1,17 +1,18 @@
 use image::RgbaImage;
 
+use crate::classify;
 use crate::color::NormalizedImage;
 use crate::mapping::PixelMapping;
-use crate::mask::Mask;
 use crate::metrics;
+use crate::pyramid::ImagePyramid;
 use crate::{
-    Alignment, CompareError, CompareOptions, Comparison, ComparisonSummary, Difference,
-    DifferenceKind, ImageDimensions, Offset, SimilarityMetrics,
+    CompareError, CompareOptions, Comparison, ComparisonSummary, Difference, DifferenceKind,
+    ImageDimensions, Offset, SimilarityMetrics,
 };
 
-const MAX_ESTIMATED_WORKING_BYTES: u64 = 1_073_741_824;
-const EXPECTED_BYTES_PER_PIXEL: u64 = 64;
-const ACTUAL_BYTES_PER_PIXEL: u64 = 32;
+const MAX_ESTIMATED_WORKING_BYTES: u64 = 1_610_612_736;
+const EXPECTED_BYTES_PER_PIXEL: u64 = 96;
+const ACTUAL_BYTES_PER_PIXEL: u64 = 64;
 
 /// Compares two in-memory images without filesystem or process side effects.
 ///
@@ -23,20 +24,43 @@ pub fn compare(
     actual: &RgbaImage,
     options: &CompareOptions,
 ) -> Result<Comparison, CompareError> {
-    options.validate()?;
-    validate_area(expected)?;
-    validate_area(actual)?;
-    validate_working_set_dimensions(
-        expected.width(),
-        expected.height(),
-        actual.width(),
-        actual.height(),
-    )?;
+    validate_inputs(expected, actual, options)?;
 
     let expected_dimensions = dimensions(expected);
     let actual_dimensions = dimensions(actual);
     let normalized_expected = NormalizedImage::try_new(expected)?;
     let normalized_actual = NormalizedImage::try_new(actual)?;
+    let expected_pyramid = ImagePyramid::try_new(&normalized_expected)?;
+    let actual_pyramid = ImagePyramid::try_new(&normalized_actual)?;
+    let raw_mapping =
+        PixelMapping::translated(&normalized_expected, &normalized_actual, Offset::default())?;
+    let raw_metrics = metrics::calculate(
+        &normalized_expected,
+        &normalized_actual,
+        &raw_mapping,
+        options.color_threshold,
+    );
+    let raw_pixels_match = raw_metrics
+        .changed_pixel_ratio
+        .is_some_and(|ratio| ratio <= f64::EPSILON);
+    let alignment = crate::alignment::estimate(
+        &expected_pyramid,
+        &actual_pyramid,
+        options.max_offset,
+        raw_pixels_match,
+    );
+    let analysis = if raw_pixels_match && expected_dimensions == actual_dimensions {
+        empty_analysis(alignment)
+    } else {
+        classify::analyze(
+            expected,
+            &normalized_expected,
+            actual,
+            &normalized_actual,
+            options,
+            alignment,
+        )?
+    };
     let mut differences = Vec::new();
 
     if expected_dimensions != actual_dimensions {
@@ -57,37 +81,35 @@ pub fn compare(
         });
     }
 
-    for component in changed_components(
-        &normalized_expected,
-        &normalized_actual,
-        options.color_threshold,
-        options.min_region_area,
-    )? {
-        differences.push(Difference {
-            id: String::new(),
-            kind: DifferenceKind::Changed,
-            expected_bounds: Some(component.bounds),
-            actual_bounds: Some(component.bounds),
-            offset: None,
-            confidence: 1.0,
-            message: format!(
-                "A {} px region contains visual differences.",
-                component.area
-            ),
-        });
-    }
+    differences.extend(analysis.differences);
 
+    differences.sort_by_key(difference_sort_key);
     for (index, difference) in differences.iter_mut().enumerate() {
         difference.id = format!("D{}", index + 1);
     }
     let summary = summarize(&differences);
     let equivalent = differences.is_empty();
-    let mapping =
-        PixelMapping::translated(&normalized_expected, &normalized_actual, Offset::default())?;
-    let raw_metrics = metrics::calculate(
+    let global_mapping = PixelMapping::translated(
         &normalized_expected,
         &normalized_actual,
-        &mapping,
+        analysis.alignment.offset,
+    )?;
+    let global_metrics = metrics::calculate(
+        &normalized_expected,
+        &normalized_actual,
+        &global_mapping,
+        options.color_threshold,
+    );
+    let structural_mapping = PixelMapping::structural(
+        &normalized_expected,
+        &normalized_actual,
+        analysis.alignment.offset,
+        &analysis.movements,
+    )?;
+    let structural_metrics = metrics::calculate(
+        &normalized_expected,
+        &normalized_actual,
+        &structural_mapping,
         options.color_threshold,
     );
 
@@ -95,23 +117,40 @@ pub fn compare(
         expected: expected_dimensions,
         actual: actual_dimensions,
         settings: options.clone(),
-        alignment: Alignment {
-            offset: Offset::default(),
-            confidence: f64::from(
-                raw_metrics
-                    .changed_pixel_ratio
-                    .is_some_and(|ratio| ratio <= f64::EPSILON),
-            ),
-        },
+        alignment: analysis.alignment,
         metrics: SimilarityMetrics {
-            raw: raw_metrics.clone(),
-            global_aligned: raw_metrics.clone(),
-            structural_aligned: raw_metrics,
+            raw: raw_metrics,
+            global_aligned: global_metrics,
+            structural_aligned: structural_metrics,
         },
         equivalent,
         summary,
         differences,
     })
+}
+
+fn empty_analysis(alignment: crate::Alignment) -> classify::StructuralAnalysis {
+    classify::StructuralAnalysis {
+        alignment,
+        differences: Vec::new(),
+        movements: Vec::new(),
+    }
+}
+
+fn validate_inputs(
+    expected: &RgbaImage,
+    actual: &RgbaImage,
+    options: &CompareOptions,
+) -> Result<(), CompareError> {
+    options.validate()?;
+    validate_area(expected)?;
+    validate_area(actual)?;
+    validate_working_set_dimensions(
+        expected.width(),
+        expected.height(),
+        actual.width(),
+        actual.height(),
+    )
 }
 
 fn validate_area(image: &RgbaImage) -> Result<(), CompareError> {
@@ -158,25 +197,6 @@ fn dimensions(image: &RgbaImage) -> ImageDimensions {
     }
 }
 
-fn changed_components(
-    expected: &NormalizedImage,
-    actual: &NormalizedImage,
-    threshold: f64,
-    minimum_area: u32,
-) -> Result<Vec<crate::mask::Component>, CompareError> {
-    let width = expected.width().min(actual.width());
-    let height = expected.height().min(actual.height());
-    let mut mask = Mask::try_new(width, height)?;
-    for y in 0..height {
-        for x in 0..width {
-            if expected.pixel(x, y).perceptual_distance(actual.pixel(x, y)) > threshold {
-                mask.set(x, y, true);
-            }
-        }
-    }
-    mask.components(minimum_area)
-}
-
 fn summarize(differences: &[Difference]) -> ComparisonSummary {
     let mut summary = ComparisonSummary {
         total: u32::try_from(differences.len()).unwrap_or(u32::MAX),
@@ -194,6 +214,37 @@ fn summarize(differences: &[Difference]) -> ComparisonSummary {
         *count = count.saturating_add(1);
     }
     summary
+}
+
+type DifferenceSortKey = (
+    u8,
+    u32,
+    u32,
+    DifferenceKind,
+    (u32, u32, u32, u32),
+    (u32, u32, u32, u32),
+    (i32, i32),
+);
+
+fn difference_sort_key(difference: &Difference) -> DifferenceSortKey {
+    let bounds = difference.expected_bounds.or(difference.actual_bounds);
+    (
+        u8::from(difference.kind != DifferenceKind::CanvasSize),
+        bounds.map_or(0, |value| value.y),
+        bounds.map_or(0, |value| value.x),
+        difference.kind,
+        bounds_key(difference.expected_bounds),
+        bounds_key(difference.actual_bounds),
+        difference
+            .offset
+            .map_or((0, 0), |offset| (offset.x, offset.y)),
+    )
+}
+
+fn bounds_key(bounds: Option<crate::Bounds>) -> (u32, u32, u32, u32) {
+    bounds.map_or((0, 0, 0, 0), |bounds| {
+        (bounds.y, bounds.x, bounds.width, bounds.height)
+    })
 }
 
 #[cfg(test)]
