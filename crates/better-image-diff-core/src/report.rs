@@ -121,32 +121,39 @@ impl Display for DifferenceKind {
 /// Similarity values calculated over one coordinate mapping.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct MetricSet {
-    /// Number of pixel pairs included.
+    /// Number of valid expected/actual pixel pairs included in this scope.
     pub compared_pixels: u64,
-    /// Fraction of expected pixels represented by the pairs.
+    /// Compared pixels divided by the full expected canvas area, in `[0, 1]`.
     pub expected_coverage: f64,
-    /// Fraction of actual pixels represented by the pairs.
+    /// Compared pixels divided by the full actual canvas area, in `[0, 1]`.
     pub actual_coverage: f64,
-    /// Normalized mean absolute RGBA error.
+    /// Mean absolute error in `[0, 1]` over linear, alpha-premultiplied RGBA channels with equal
+    /// channel weight; `None` when the scope has no pairs.
     pub mae: Option<f64>,
-    /// Normalized root mean squared RGBA error.
+    /// Root mean squared error in `[0, 1]` over the same channels as MAE; `None` when the scope has
+    /// no pairs.
     pub rmse: Option<f64>,
-    /// Peak signal-to-noise ratio in decibels; `None` represents positive infinity.
+    /// Peak signal-to-noise ratio in decibels using peak `1.0`; `None` represents either positive
+    /// infinity for a perfect scope or an unavailable value when there are no pairs. Inspect
+    /// `compared_pixels` to distinguish those cases.
     pub psnr_db: Option<f64>,
-    /// Windowed structural similarity.
+    /// Mean structural similarity in `[-1, 1]`, averaged across the four normalized channels.
+    /// Uses an 11x11 Gaussian window (`sigma=1.5`, `K1=0.01`, `K2=0.03`, `L=1`) sampled every
+    /// eight pixels, with one available-area window for smaller images.
     pub ssim: Option<f64>,
-    /// Fraction of perceptually changed pixel pairs.
+    /// Fraction of pairs whose Lab-plus-alpha distance is strictly greater than the configured
+    /// perceptual threshold, in `[0, 1]`.
     pub changed_pixel_ratio: Option<f64>,
 }
 
 /// Literal and alignment-aware similarity metrics.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SimilarityMetrics {
-    /// Same-coordinate overlap.
+    /// Same-coordinate overlap without alignment.
     pub raw: MetricSet,
-    /// Overlap after whole-image translation.
+    /// Valid overlap after applying the detected whole-image translation.
     pub global_aligned: MetricSet,
-    /// Overlap after validated global and local translations.
+    /// Valid, uniquely paired pixels after detected global and validated local translations.
     pub structural_aligned: MetricSet,
 }
 

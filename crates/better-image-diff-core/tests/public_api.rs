@@ -63,14 +63,18 @@ fn a_different_canvas_and_pixels_are_summarized() {
     let expected = RgbaImage::from_pixel(4, 3, Rgba([10, 20, 30, 255]));
     let actual = RgbaImage::from_pixel(5, 3, Rgba([30, 20, 10, 255]));
 
-    let comparison = compare(&expected, &actual, &CompareOptions::default()).expect("compare");
+    let options = CompareOptions {
+        min_region_area: 1,
+        ..CompareOptions::default()
+    };
+    let comparison = compare(&expected, &actual, &options).expect("compare");
 
     assert!(!comparison.equivalent);
     assert_eq!(comparison.summary.total, 2);
     assert_eq!(comparison.summary.canvas_size, 1);
     assert_eq!(comparison.summary.changed, 1);
-    assert!(comparison.metrics.raw.mae.is_none());
-    assert!(comparison.metrics.raw.psnr_db.is_none());
+    assert!(comparison.metrics.raw.mae.expect("MAE") > 0.0);
+    assert!(comparison.metrics.raw.psnr_db.is_some());
 }
 
 #[test]
@@ -98,4 +102,20 @@ fn rendering_rejects_an_excessive_combined_canvas() {
         render_artifacts(&expected, &actual, &comparison),
         Err(RenderError::ImageTooLarge)
     );
+}
+
+#[test]
+fn alignment_confidence_is_not_derived_from_filtered_findings() {
+    let expected = RgbaImage::from_pixel(5, 5, Rgba([255, 255, 255, 255]));
+    let mut noisy = expected.clone();
+    noisy.put_pixel(2, 2, Rgba([0, 0, 0, 255]));
+
+    let ignored_noise = compare(&expected, &noisy, &CompareOptions::default()).expect("compare");
+    assert!(ignored_noise.equivalent);
+    assert!(ignored_noise.alignment.confidence.abs() < f64::EPSILON);
+
+    let wider = RgbaImage::from_pixel(6, 5, Rgba([255, 255, 255, 255]));
+    let canvas_only = compare(&expected, &wider, &CompareOptions::default()).expect("compare");
+    assert!(!canvas_only.equivalent);
+    assert!((canvas_only.alignment.confidence - 1.0).abs() < f64::EPSILON);
 }
