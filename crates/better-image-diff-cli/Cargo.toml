@@ -1,0 +1,20 @@
+[package]
+name = "better-image-diff"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "better-image-diff"
+path = "src/main.rs"
+
+[dependencies]
+better-image-diff-core = { path = "../better-image-diff-core" }
+clap.workspace = true
+image = { workspace = true, features = ["png"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
