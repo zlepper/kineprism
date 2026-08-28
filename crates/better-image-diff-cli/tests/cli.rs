@@ -125,6 +125,16 @@ fn meaningful_differences_exit_one() {
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
     assert_eq!(report["equivalent"], false);
     assert!(report["summary"]["total"].as_u64().unwrap() >= 1);
+    let difference = &report["differences"][0];
+    let id = difference["id"].as_str().expect("finding ID");
+    assert!(
+        difference["message"]
+            .as_str()
+            .expect("message")
+            .contains(id)
+    );
+    assert!(difference.get("expected_bounds").is_none());
+    assert!(difference.get("offset").is_none());
 }
 
 #[test]
@@ -205,7 +215,9 @@ fn failed_forced_replacement_cleans_up_temporary_artifacts() {
     let actual = directory.path().join("source-actual.png");
     let output_directory = directory.path().join("output");
     fs::create_dir(&output_directory).expect("create output directory");
-    fs::create_dir(output_directory.join("expected.png")).expect("create blocking directory");
+    let prior_expected = b"prior expected artifact";
+    fs::write(output_directory.join("expected.png"), prior_expected).expect("write prior artifact");
+    fs::create_dir(output_directory.join("actual.png")).expect("create blocking directory");
     let pixels = RgbaImage::from_pixel(3, 2, Rgba([12, 34, 56, 255]));
     pixels.save(&expected).expect("save expected");
     pixels.save(&actual).expect("save actual");
@@ -219,14 +231,80 @@ fn failed_forced_replacement_cleans_up_temporary_artifacts() {
         .expect("run CLI");
 
     assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        fs::read(output_directory.join("expected.png")).expect("restored prior artifact"),
+        prior_expected
+    );
     let leftovers: Vec<_> = fs::read_dir(&output_directory)
         .expect("read output directory")
         .filter_map(Result::ok)
         .filter(|entry| {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            name.starts_with('.') && name.ends_with(".tmp")
+            name.starts_with('.') && (name.ends_with(".tmp") || name.ends_with(".bak"))
         })
         .collect();
-    assert!(leftovers.is_empty(), "temporary files left behind");
+    assert!(leftovers.is_empty(), "transaction files left behind");
+}
+
+#[test]
+fn force_replaces_only_known_artifacts_and_is_deterministic() {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("source-expected.png");
+    let actual_path = directory.path().join("source-actual.png");
+    let output_directory = directory.path().join("output");
+    let mut expected = RgbaImage::from_pixel(40, 30, Rgba([250, 250, 250, 255]));
+    let mut actual = expected.clone();
+    for y in 8..20 {
+        for x in 10..24 {
+            expected.put_pixel(x, y, Rgba([30, 60, 100, 255]));
+            actual.put_pixel(x + 4, y, Rgba([30, 60, 100, 255]));
+        }
+    }
+    expected.save(&expected_path).expect("save expected");
+    actual.save(&actual_path).expect("save actual");
+
+    let first = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(&output_directory)
+        .output()
+        .expect("first run");
+    assert_eq!(first.status.code(), Some(1), "{:?}", first.stderr);
+    let first_artifacts: Vec<_> = ["expected.png", "actual.png", "diff.png"]
+        .into_iter()
+        .map(|name| fs::read(output_directory.join(name)).expect("read first artifact"))
+        .collect();
+    fs::write(output_directory.join("keep.txt"), b"untouched").expect("write unrelated file");
+
+    let collision = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(&output_directory)
+        .output()
+        .expect("collision run");
+    assert_eq!(collision.status.code(), Some(2));
+
+    let forced = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(&output_directory)
+        .arg("--force")
+        .output()
+        .expect("forced run");
+    assert_eq!(forced.status.code(), Some(1), "{:?}", forced.stderr);
+    assert_eq!(first.stdout, forced.stdout);
+    assert_eq!(
+        fs::read(output_directory.join("keep.txt")).expect("read unrelated file"),
+        b"untouched"
+    );
+    for (index, name) in ["expected.png", "actual.png", "diff.png"]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            fs::read(output_directory.join(name)).expect("read replaced artifact"),
+            first_artifacts[index]
+        );
+    }
 }

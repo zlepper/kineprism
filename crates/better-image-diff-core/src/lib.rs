@@ -16,6 +16,8 @@ mod movement;
 mod proposals;
 mod pyramid;
 mod render;
+mod render_font;
+mod render_primitives;
 mod report;
 mod residual;
 

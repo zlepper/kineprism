@@ -98,6 +98,10 @@ fn normalize(pixel: Rgba<u8>) -> NormalizedPixel {
     }
 }
 
+pub(crate) fn rgba_perceptual_distance(left: Rgba<u8>, right: Rgba<u8>) -> f64 {
+    normalize(left).perceptual_distance(normalize(right))
+}
+
 fn srgb_to_linear(value: u8) -> f32 {
     let encoded = f32::from(value) / 255.0;
     if encoded <= 0.040_45 {

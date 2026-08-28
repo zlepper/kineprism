@@ -86,6 +86,7 @@ pub fn compare(
     differences.sort_by_key(difference_sort_key);
     for (index, difference) in differences.iter_mut().enumerate() {
         difference.id = format!("D{}", index + 1);
+        difference.message = format!("{}: {}", difference.id, difference.message);
     }
     let summary = summarize(&differences);
     let equivalent = differences.is_empty();
