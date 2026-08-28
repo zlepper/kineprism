@@ -2,12 +2,12 @@ use image::RgbaImage;
 
 use crate::classify;
 use crate::color::NormalizedImage;
-use crate::mapping::PixelMapping;
+use crate::mapping::{MovementMapping, PixelMapping};
 use crate::metrics;
 use crate::pyramid::ImagePyramid;
 use crate::{
     CompareError, CompareOptions, Comparison, ComparisonSummary, Difference, DifferenceKind,
-    ImageDimensions, Offset, SimilarityMetrics,
+    ImageDimensions, MetricSet, Offset, SimilarityMetrics,
 };
 
 const MAX_ESTIMATED_WORKING_BYTES: u64 = 1_610_612_736;
@@ -90,29 +90,14 @@ pub fn compare(
     }
     let summary = summarize(&differences);
     let equivalent = differences.is_empty();
-    let global_mapping = PixelMapping::translated(
+    let (global_metrics, structural_metrics) = calculate_aligned_metrics(
         &normalized_expected,
         &normalized_actual,
-        analysis.alignment.offset,
-    )?;
-    let global_metrics = metrics::calculate(
-        &normalized_expected,
-        &normalized_actual,
-        &global_mapping,
-        options.color_threshold,
-    );
-    let structural_mapping = PixelMapping::structural(
-        &normalized_expected,
-        &normalized_actual,
+        options,
         analysis.alignment.offset,
         &analysis.movements,
+        &raw_metrics,
     )?;
-    let structural_metrics = metrics::calculate(
-        &normalized_expected,
-        &normalized_actual,
-        &structural_mapping,
-        options.color_threshold,
-    );
 
     Ok(Comparison {
         expected: expected_dimensions,
@@ -128,6 +113,35 @@ pub fn compare(
         summary,
         differences,
     })
+}
+
+fn calculate_aligned_metrics(
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+    options: &CompareOptions,
+    alignment_offset: Offset,
+    movements: &[MovementMapping],
+    raw_metrics: &MetricSet,
+) -> Result<(MetricSet, MetricSet), CompareError> {
+    let global_metrics = if alignment_offset == Offset::default() {
+        raw_metrics.clone()
+    } else {
+        let global_mapping = PixelMapping::translated(expected, actual, alignment_offset)?;
+        metrics::calculate(expected, actual, &global_mapping, options.color_threshold)
+    };
+    let structural_metrics = if movements.is_empty() {
+        global_metrics.clone()
+    } else {
+        let structural_mapping =
+            PixelMapping::structural(expected, actual, alignment_offset, movements)?;
+        metrics::calculate(
+            expected,
+            actual,
+            &structural_mapping,
+            options.color_threshold,
+        )
+    };
+    Ok((global_metrics, structural_metrics))
 }
 
 fn empty_analysis(alignment: crate::Alignment) -> classify::StructuralAnalysis {
