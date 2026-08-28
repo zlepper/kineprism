@@ -262,3 +262,18 @@ The ignored full-HD smoke test can be run separately in release mode:
 ```console
 cargo test --release -p better-image-diff-core --test performance -- --ignored
 ```
+
+### Benchmarks
+
+Criterion benchmarks exercise `better_image_diff_core::compare` on deterministic 1920×1080
+application-like screenshots. They cover identical images, one card moved five pixels, and a
+dashboard with many moved and appearance-changed elements. PNG decoding and artifact rendering are
+excluded so the measurements isolate structural comparison.
+
+```console
+cargo bench -p better-image-diff-core --bench comparison
+```
+
+Criterion prints statistical timing estimates and throughput in pixels per second. It stores
+detailed reports under `target/criterion/`. Each scenario validates its expected comparison result
+before measurement so an algorithm regression cannot silently produce a faster but invalid sample.
