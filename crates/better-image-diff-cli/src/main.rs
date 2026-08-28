@@ -25,7 +25,7 @@ struct Args {
     expected: PathBuf,
     /// Implementation PNG.
     actual: PathBuf,
-    /// Directory for expected.png, actual.png, and diff.png.
+    /// Directory for report.json and the three annotated PNGs.
     #[arg(long)]
     output_dir: PathBuf,
     /// Largest translation to search on each axis.
@@ -37,7 +37,7 @@ struct Args {
     /// Smallest significant connected region.
     #[arg(long, default_value_t = CompareOptions::default().min_region_area)]
     min_region_area: u32,
-    /// Replace the three known artifacts if they exist.
+    /// Replace the four known artifacts if they exist.
     #[arg(long)]
     force: bool,
 }
@@ -78,11 +78,11 @@ fn run(arguments: &Args) -> Result<bool, CliError> {
         &artifact_paths,
         &comparison,
     );
-    let json = serde_json::to_vec_pretty(&report)?;
+    let mut json = serde_json::to_vec_pretty(&report)?;
+    json.push(b'\n');
 
-    artifact_paths.write(&rendered, arguments.force)?;
+    artifact_paths.write(&rendered, &json, arguments.force)?;
     io::stdout().write_all(&json)?;
-    io::stdout().write_all(b"\n")?;
     Ok(comparison.equivalent)
 }
 

@@ -9,11 +9,13 @@ use image::{ExtendedColorType, ImageFormat};
 use crate::error::CliError;
 
 static NEXT_TRANSACTION: AtomicU64 = AtomicU64::new(0);
+const ARTIFACT_COUNT: usize = 4;
 
 pub(crate) struct ArtifactPaths {
     pub(crate) expected: PathBuf,
     pub(crate) actual: PathBuf,
     pub(crate) diff: PathBuf,
+    pub(crate) report: PathBuf,
     directory: PathBuf,
 }
 
@@ -23,6 +25,7 @@ impl ArtifactPaths {
             expected: directory.join("expected.png"),
             actual: directory.join("actual.png"),
             diff: directory.join("diff.png"),
+            report: directory.join("report.json"),
             directory: directory.to_owned(),
         }
     }
@@ -46,7 +49,12 @@ impl ArtifactPaths {
         Ok(())
     }
 
-    pub(crate) fn write(&self, rendered: &RenderedArtifacts, force: bool) -> Result<(), CliError> {
+    pub(crate) fn write(
+        &self,
+        rendered: &RenderedArtifacts,
+        report: &[u8],
+        force: bool,
+    ) -> Result<(), CliError> {
         fs::create_dir_all(&self.directory)
             .map_err(|source| Self::io_error("create output directory", &self.directory, source))?;
         let transaction_directory =
@@ -60,7 +68,7 @@ impl ArtifactPaths {
         let backups = backup_paths(&transaction_directory);
         let buffers = [&rendered.expected, &rendered.actual, &rendered.diff];
 
-        for (path, image) in temporary.iter().zip(buffers) {
+        for (path, image) in temporary[..3].iter().zip(buffers) {
             if let Err(source) = image::save_buffer_with_format(
                 path,
                 image.as_raw(),
@@ -77,16 +85,21 @@ impl ArtifactPaths {
                 });
             }
         }
+        if let Err(source) = fs::write(&temporary[3], report) {
+            cleanup(&temporary);
+            cleanup_transaction_directory(&transaction_directory);
+            return Err(Self::io_error("write JSON report", &self.report, source));
+        }
 
         let targets = self.targets();
-        let mut backed_up = [false; 3];
+        let mut backed_up = [false; ARTIFACT_COUNT];
         if let Err(error) = prepare_backups(targets, &backups, force, &mut backed_up) {
             restore_backups(targets, &backups, backed_up);
             cleanup(&temporary);
             cleanup_transaction_directory(&transaction_directory);
             return Err(error);
         }
-        let mut committed = [false; 3];
+        let mut committed = [false; ARTIFACT_COUNT];
         for index in 0..temporary.len() {
             if let Err(source) = fs::rename(&temporary[index], targets[index]) {
                 rollback_committed(targets, committed);
@@ -102,8 +115,8 @@ impl ArtifactPaths {
         Ok(())
     }
 
-    fn targets(&self) -> [&Path; 3] {
-        [&self.expected, &self.actual, &self.diff]
+    fn targets(&self) -> [&Path; ARTIFACT_COUNT] {
+        [&self.expected, &self.actual, &self.diff, &self.report]
     }
 
     fn io_error(action: &'static str, path: &Path, source: io::Error) -> CliError {
@@ -136,27 +149,29 @@ fn reserve_transaction_directory(
     ))
 }
 
-fn temporary_paths(transaction_directory: &Path) -> [PathBuf; 3] {
+fn temporary_paths(transaction_directory: &Path) -> [PathBuf; ARTIFACT_COUNT] {
     [
         transaction_directory.join("expected.tmp"),
         transaction_directory.join("actual.tmp"),
         transaction_directory.join("diff.tmp"),
+        transaction_directory.join("report.tmp"),
     ]
 }
 
-fn backup_paths(transaction_directory: &Path) -> [PathBuf; 3] {
+fn backup_paths(transaction_directory: &Path) -> [PathBuf; ARTIFACT_COUNT] {
     [
         transaction_directory.join("expected.bak"),
         transaction_directory.join("actual.bak"),
         transaction_directory.join("diff.bak"),
+        transaction_directory.join("report.bak"),
     ]
 }
 
 fn prepare_backups(
-    targets: [&Path; 3],
-    backups: &[PathBuf; 3],
+    targets: [&Path; ARTIFACT_COUNT],
+    backups: &[PathBuf; ARTIFACT_COUNT],
     force: bool,
-    backed_up: &mut [bool; 3],
+    backed_up: &mut [bool; ARTIFACT_COUNT],
 ) -> Result<(), CliError> {
     for index in 0..targets.len() {
         if !targets[index].exists() {
@@ -183,7 +198,7 @@ fn prepare_backups(
     Ok(())
 }
 
-fn rollback_committed(targets: [&Path; 3], committed: [bool; 3]) {
+fn rollback_committed(targets: [&Path; ARTIFACT_COUNT], committed: [bool; ARTIFACT_COUNT]) {
     for (target, was_committed) in targets.into_iter().zip(committed) {
         if was_committed {
             let _result = fs::remove_file(target);
@@ -191,7 +206,11 @@ fn rollback_committed(targets: [&Path; 3], committed: [bool; 3]) {
     }
 }
 
-fn restore_backups(targets: [&Path; 3], backups: &[PathBuf; 3], backed_up: [bool; 3]) {
+fn restore_backups(
+    targets: [&Path; ARTIFACT_COUNT],
+    backups: &[PathBuf; ARTIFACT_COUNT],
+    backed_up: [bool; ARTIFACT_COUNT],
+) {
     for index in 0..targets.len() {
         if backed_up[index] {
             let _result = fs::rename(&backups[index], targets[index]);

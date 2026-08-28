@@ -14,7 +14,7 @@ Version one will:
 - Conservatively classify remaining differences as resized, added, removed, or changed.
 - Ignore small perceptual and rasterization differences by default.
 - Emit a structured JSON report intended for automated consumption.
-- Generate three annotated PNG artifacts for visual inspection.
+- Generate three annotated PNG artifacts and persist the JSON report for later inspection.
 - Run entirely locally without a vision model, network access, native OpenCV installation, or external service.
 
 The implementation must favor trustworthy findings over aggressive classification. When the evidence for a specific explanation is weak, report a generic `changed` region rather than inventing a movement or semantic interpretation.
@@ -164,7 +164,7 @@ The argument names and all messages must consistently preserve this direction. A
 - `--max-offset <PIXELS>` defaults to `128`. It must be a non-negative integer. It controls both global and local translation searches.
 - `--color-threshold <DELTA>` defaults to `2.3`. It must be finite and non-negative. It controls the perceptual pixel-distance threshold.
 - `--min-region-area <PIXELS>` defaults to `16`. It must be a positive integer and represents the minimum significant connected-region area.
-- `--force` permits replacement of the three known artifact files. It must not delete or modify unrelated files in the output directory.
+- `--force` permits replacement of the four known artifact files. It must not delete or modify unrelated files in the output directory.
 - Standard `--help` and `--version` behavior comes from `clap`.
 
 ### Standard streams
@@ -186,13 +186,14 @@ The argument names and all messages must consistently preserve this direction. A
 
 Write these files inside `--output-dir`:
 
+- `report.json`: the exact pretty-printed JSON document emitted on stdout, including its trailing newline.
 - `expected.png`: the expected screenshot with expected-side regions marked.
 - `actual.png`: the actual screenshot with actual-side regions marked.
 - `diff.png`: a white-background diagnostic image containing only comparison annotations.
 
-If any target file already exists and `--force` is absent, fail before performing any replacement. With `--force`, replace only these exact files.
+If any target file already exists and `--force` is absent, fail before performing any replacement. With `--force`, replace only these exact four files.
 
-Render all image buffers fully before committing output files. Write each artifact to a temporary sibling file, finish all encodes, and then rename the completed files into place. Clean up temporary files on a handled error. This minimizes partially written artifacts without recursively modifying the output directory.
+Render all image buffers and serialize the report fully before committing output files. Write each artifact to a transaction directory, finish all encodes and serialization, and then rename the completed files into place. Clean up temporary files on a handled error. This minimizes partially written artifacts without recursively modifying the output directory.
 
 ### Annotation conventions
 
@@ -487,7 +488,7 @@ After classification, remove insignificant components again and coalesce immedia
 - Derive summary counts and `equivalent`.
 - Return a path-independent `Comparison`, including metrics, from the core crate.
 - Render all three in-memory artifacts from the finalized `Comparison` through the core renderer.
-- Let the CLI add input/artifact paths, serialize the JSON envelope, commit artifacts, and write JSON only after comparison and rendering succeed.
+- Let the CLI add input/artifact paths, serialize the JSON envelope once, atomically commit the three images and `report.json`, and then write those same JSON bytes to stdout.
 - Let the CLI return the exit code determined by the core `equivalent` value.
 
 ## 10. Geometry and Safety Rules
@@ -548,7 +549,7 @@ Tests must exercise behavior with real in-memory/generated images. Do not mock i
 
 Generate simple UI-like fixtures using rectangles, borders, text-like stripe patterns, and contrasting backgrounds:
 
-1. Identical images produce no findings, three valid artifacts, and exit `0`.
+1. Identical images produce no findings, three valid PNGs, a matching `report.json`, and exit `0`.
 2. A bordered content box shifted right by 5 px produces one `moved` finding with offset `(5, 0)` and no giant added/removed pair.
 3. A box shifted left and upward verifies signed offsets and edge clipping.
 4. Two components shifted independently produce two stable IDs and correct vectors.
@@ -583,6 +584,7 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 ### CLI integration tests
 
 - Valid invocation emits parseable JSON and only JSON on stdout.
+- `report.json` is byte-equivalent to stdout and participates in collision, rollback, and `--force` behavior.
 - Exit codes are exactly `0`, `1`, and `2` for equivalent, different, and failed comparisons.
 - Artifact files exist, decode as PNGs, and have the expected dimensions.
 - Expected and actual annotations contain the same IDs/colors as the diff artifact.
@@ -613,7 +615,7 @@ The README must include:
 - Exit-code semantics.
 - A JSON example with the offset-direction convention.
 - Definitions, ranges, comparison scopes, and interpretation guidance for MAE, RMSE, PSNR, SSIM, changed-pixel ratio, and coverage.
-- A description of the three output images and annotation colors.
+- A description of `report.json`, the three output images, and annotation colors.
 - Explanation of perceptual tolerance and minimum-region filtering.
 - Clear limitations: PNG only, same scale, bounded translation, conservative heuristics, and no UI semantics.
 - Guidance that consumers should trust explicit movement findings and inspect generic `changed` regions when confidence is insufficient.

@@ -60,7 +60,7 @@ fn missing_arguments_use_the_documented_error_exit_code() {
 }
 
 #[test]
-fn identical_pngs_emit_json_and_three_artifacts() {
+fn identical_pngs_emit_json_and_four_artifacts() {
     let directory = TestDirectory::new();
     let expected = directory.path().join("reference.png");
     let actual = directory.path().join("implementation.png");
@@ -84,6 +84,10 @@ fn identical_pngs_emit_json_and_three_artifacts() {
     assert_eq!(report["settings"]["max_offset"], 128);
     assert_eq!(report["settings"]["color_threshold"], 2.3);
     assert_eq!(report["settings"]["min_region_area"], 16);
+    assert_eq!(
+        fs::read(output_directory.join("report.json")).expect("read JSON report"),
+        output.stdout
+    );
 
     for name in ["expected.png", "actual.png", "diff.png"] {
         let artifact = output_directory.join(name);
@@ -317,7 +321,7 @@ fn failed_forced_replacement_cleans_up_temporary_artifacts() {
     fs::create_dir(&output_directory).expect("create output directory");
     let prior_expected = b"prior expected artifact";
     fs::write(output_directory.join("expected.png"), prior_expected).expect("write prior artifact");
-    fs::create_dir(output_directory.join("actual.png")).expect("create blocking directory");
+    fs::create_dir(output_directory.join("report.json")).expect("create blocking directory");
     let pixels = RgbaImage::from_pixel(3, 2, Rgba([12, 34, 56, 255]));
     pixels.save(&expected).expect("save expected");
     pixels.save(&actual).expect("save actual");
@@ -371,7 +375,7 @@ fn force_replaces_only_known_artifacts_and_is_deterministic() {
         .output()
         .expect("first run");
     assert_eq!(first.status.code(), Some(1), "{:?}", first.stderr);
-    let first_artifacts: Vec<_> = ["expected.png", "actual.png", "diff.png"]
+    let first_artifacts: Vec<_> = ["expected.png", "actual.png", "diff.png", "report.json"]
         .into_iter()
         .map(|name| fs::read(output_directory.join(name)).expect("read first artifact"))
         .collect();
@@ -398,7 +402,7 @@ fn force_replaces_only_known_artifacts_and_is_deterministic() {
         fs::read(output_directory.join("keep.txt")).expect("read unrelated file"),
         b"untouched"
     );
-    for (index, name) in ["expected.png", "actual.png", "diff.png"]
+    for (index, name) in ["expected.png", "actual.png", "diff.png", "report.json"]
         .into_iter()
         .enumerate()
     {

@@ -52,7 +52,8 @@ Options:
 - `--color-threshold` defaults to `2.3`. Pixels at or below this perceptual distance are treated
   as equivalent.
 - `--min-region-area` defaults to `16`. Smaller connected residual regions are ignored.
-- `--force` replaces only `expected.png`, `actual.png`, and `diff.png` in the output directory.
+- `--force` replaces only `report.json`, `expected.png`, `actual.png`, and `diff.png` in the output
+  directory.
   Unrelated files are preserved.
 
 On a completed comparison, stdout is exactly one pretty-printed JSON document followed by a
@@ -149,7 +150,11 @@ sampled every eight pixels and adapted to the available area for smaller images.
 
 ## Artifacts
 
-The CLI commits three PNGs only after all three have rendered and encoded successfully:
+The CLI commits four files as one transaction after comparison, rendering, encoding, and JSON
+serialization succeed:
+
+- `report.json` is byte-for-byte identical to the JSON written to stdout, including its trailing
+  newline.
 
 - `expected.png` overlays expected-side evidence on the target.
 - `actual.png` overlays actual-side evidence on the implementation.
@@ -161,9 +166,9 @@ Finding colors are blue for `moved`, purple for `resized`, green for `added`, or
 red for `changed`, and neutral gray for `canvas_size`. A stable ID and color connect the JSON record
 to all applicable images.
 
-Without `--force`, any existing artifact target aborts the operation. With `--force`, prior
-artifacts are backed up inside an atomically reserved transaction directory and restored if the
-commit cannot complete. The CLI refuses to overwrite either input, including a path alias.
+Without `--force`, any of the four existing artifact targets aborts the operation. With `--force`,
+prior artifacts are backed up inside an atomically reserved transaction directory and restored if
+the commit cannot complete. The CLI refuses to overwrite either input, including a path alias.
 
 ## Use the core library
 
@@ -233,6 +238,11 @@ regenerated. The CLI integration suite also takes a crop of the generated target
 complete “New Customers” card down by exactly 12 pixels, and asserts both a `moved` finding with
 offset `(0, 12)` and improved structural-aligned MAE. Focused synthetic tests remain the
 authoritative regression for the exact five-pixel, one-movement behavior.
+
+[`examples/deterministic-ui`](examples/deterministic-ui) reuses the same dashboard but constructs
+the changed image with ImageMagick instead of generative editing. It moves the middle KPI card down
+by 62 pixels and moves both panels below it down by 43 pixels, reproducing the original layout
+reflow with exact, documented ground truth and no resizing.
 
 ## Limitations
 
