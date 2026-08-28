@@ -41,8 +41,12 @@ fn black_and_white_have_hand_calculable_error_metrics() {
         1e-12,
     );
     assert_eq!(metrics.changed_pixel_ratio, Some(1.0));
-    assert!(metrics.ssim.expect("SSIM") >= -1.0);
-    assert!(metrics.ssim.expect("SSIM") <= 1.0);
+    let constant_channel_score = 0.000_1 / 1.000_1;
+    assert_close(
+        metrics.ssim.expect("SSIM"),
+        (3.0 * constant_channel_score + 1.0) / 4.0,
+        1e-12,
+    );
 }
 
 #[test]

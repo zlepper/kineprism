@@ -9,6 +9,18 @@ fn fill_rect(image: &mut RgbaImage, x: u32, y: u32, width: u32, height: u32, col
     }
 }
 
+fn blended(source: Rgba<u8>, overlay: Rgba<u8>) -> Rgba<u8> {
+    let alpha = u16::from(overlay[3]);
+    let inverse = 255 - alpha;
+    let mut result = source;
+    for channel in 0..3 {
+        let value = u16::from(overlay[channel]) * alpha + u16::from(source[channel]) * inverse;
+        result[channel] = u8::try_from((value + 127) / 255).expect("blended channel");
+    }
+    result[3] = 255;
+    result
+}
+
 #[test]
 fn movement_artifacts_share_blue_annotations_and_are_deterministic() {
     let background = Rgba([245, 247, 250, 255]);
@@ -37,6 +49,33 @@ fn movement_artifacts_share_blue_annotations_and_are_deterministic() {
             .pixels()
             .any(|pixel| pixel.0 == [32, 115, 230, 255])
     );
+    let movement = comparison
+        .differences
+        .iter()
+        .find(|difference| difference.kind == DifferenceKind::Moved)
+        .expect("movement");
+    assert_eq!(movement.id, "D1");
+    for (artifact, source, bounds) in [
+        (
+            &first.expected,
+            &expected,
+            movement.expected_bounds.unwrap(),
+        ),
+        (&first.actual, &actual, movement.actual_bounds.unwrap()),
+    ] {
+        let label = (bounds.x + 2, bounds.y - 8);
+        let blue = Rgba([32, 115, 230, 210]);
+        assert_eq!(
+            *artifact.get_pixel(label.0, label.1),
+            blended(*source.get_pixel(label.0, label.1), blue),
+            "D glyph should use the movement color"
+        );
+        assert_eq!(
+            *artifact.get_pixel(label.0 + 8, label.1),
+            blended(*source.get_pixel(label.0 + 8, label.1), blue),
+            "1 glyph should correlate the D1 ID"
+        );
+    }
 }
 
 #[test]

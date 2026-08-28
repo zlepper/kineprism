@@ -88,15 +88,79 @@ fn identical_pngs_emit_json_and_three_artifacts() {
     for name in ["expected.png", "actual.png", "diff.png"] {
         let artifact = output_directory.join(name);
         assert!(artifact.is_file(), "missing {}", artifact.display());
+        let decoded = image::ImageReader::open(&artifact)
+            .expect("open artifact")
+            .with_guessed_format()
+            .expect("guess artifact");
+        assert_eq!(decoded.format(), Some(ImageFormat::Png));
         assert_eq!(
-            image::ImageReader::open(artifact)
-                .expect("open artifact")
-                .with_guessed_format()
-                .expect("guess artifact")
-                .format(),
-            Some(ImageFormat::Png)
+            decoded
+                .decode()
+                .expect("decode artifact")
+                .to_rgba8()
+                .dimensions(),
+            (8, 6)
+        );
+        assert_eq!(
+            report["artifacts"][name.trim_end_matches(".png")],
+            artifact.to_string_lossy().as_ref()
         );
     }
+}
+
+#[test]
+fn generated_dashboard_card_shift_is_reported_structurally() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/realistic-ui/expected.png");
+    let dashboard = image::open(&fixture)
+        .unwrap_or_else(|error| panic!("open {}: {error}", fixture.display()))
+        .to_rgba8();
+    let expected = image::imageops::crop_imm(&dashboard, 260, 90, 800, 360).to_image();
+    let mut actual = expected.clone();
+    let card = image::imageops::crop_imm(&expected, 410, 32, 364, 285).to_image();
+    for y in 32..317 {
+        let background = *expected.get_pixel(400, y);
+        for x in 410..774 {
+            actual.put_pixel(x, y, background);
+        }
+    }
+    image::imageops::overlay(&mut actual, &card, 410, 44);
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("dashboard-expected.png");
+    let actual_path = directory.path().join("dashboard-actual.png");
+    expected.save(&expected_path).expect("save expected crop");
+    actual.save(&actual_path).expect("save actual crop");
+
+    let output = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(directory.path().join("output"))
+        .output()
+        .expect("run CLI");
+
+    assert_eq!(output.status.code(), Some(1), "{:?}", output.stderr);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
+    assert!(
+        report["differences"]
+            .as_array()
+            .expect("differences")
+            .iter()
+            .any(|finding| {
+                finding["kind"] == "moved"
+                    && finding["offset"]["x"] == 0
+                    && finding["offset"]["y"] == 12
+            }),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(
+        report["metrics"]["structural_aligned"]["mae"]
+            .as_f64()
+            .expect("structural MAE")
+            < report["metrics"]["global_aligned"]["mae"]
+                .as_f64()
+                .expect("global MAE")
+    );
 }
 
 #[test]
@@ -154,7 +218,7 @@ fn invalid_options_fail_before_input_io() {
 }
 
 #[test]
-fn missing_and_corrupt_inputs_exit_two() {
+fn missing_non_png_and_corrupt_png_inputs_exit_two() {
     let directory = TestDirectory::new();
     let missing = command()
         .args(["missing-expected.png", "missing-actual.png"])
@@ -165,10 +229,22 @@ fn missing_and_corrupt_inputs_exit_two() {
     assert_eq!(missing.status.code(), Some(2));
     assert!(missing.stdout.is_empty());
 
-    let corrupt = directory.path().join("corrupt.png");
+    let non_png = directory.path().join("not-an-image.gif");
     let valid = directory.path().join("valid.png");
-    fs::write(&corrupt, b"not a PNG").expect("write corrupt input");
+    fs::write(&non_png, b"GIF89a").expect("write non-PNG input");
     RgbaImage::new(1, 1).save(&valid).expect("save valid input");
+    let non_png_result = command()
+        .args([non_png.as_os_str(), valid.as_os_str()])
+        .arg("--output-dir")
+        .arg(directory.path().join("non-png-output"))
+        .output()
+        .expect("run CLI");
+    assert_eq!(non_png_result.status.code(), Some(2));
+    assert!(non_png_result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&non_png_result.stderr).contains("not a PNG"));
+
+    let corrupt = directory.path().join("corrupt.png");
+    fs::write(&corrupt, b"\x89PNG\r\n\x1a\ntruncated").expect("write corrupt PNG");
     let corrupt_result = command()
         .args([corrupt.as_os_str(), valid.as_os_str()])
         .arg("--output-dir")
@@ -177,6 +253,30 @@ fn missing_and_corrupt_inputs_exit_two() {
         .expect("run CLI");
     assert_eq!(corrupt_result.status.code(), Some(2));
     assert!(corrupt_result.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&corrupt_result.stderr).contains("decode PNG"));
+}
+
+#[test]
+fn invalid_output_directory_exits_two_without_json() {
+    let directory = TestDirectory::new();
+    let expected = directory.path().join("expected.png");
+    let actual = directory.path().join("actual.png");
+    let blocked_output = directory.path().join("output-is-a-file");
+    let image = RgbaImage::from_pixel(2, 2, Rgba([20, 30, 40, 255]));
+    image.save(&expected).expect("save expected");
+    image.save(&actual).expect("save actual");
+    fs::write(&blocked_output, b"not a directory").expect("create blocking file");
+
+    let output = command()
+        .args([expected.as_os_str(), actual.as_os_str()])
+        .arg("--output-dir")
+        .arg(&blocked_output)
+        .output()
+        .expect("run CLI");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("create output directory"));
 }
 
 #[test]

@@ -49,6 +49,22 @@ pub(crate) fn append_unhandled(
             ));
         }
     }
+    append_unmatched_canvas_regions(
+        expected,
+        actual,
+        alignment,
+        options.min_region_area,
+        true,
+        differences,
+    );
+    append_unmatched_canvas_regions(
+        actual,
+        expected,
+        reverse,
+        options.min_region_area,
+        false,
+        differences,
+    );
     Ok(())
 }
 
@@ -110,6 +126,68 @@ fn aligned_mask(
         }
     }
     Ok(mask)
+}
+
+fn append_unmatched_canvas_regions(
+    source: &NormalizedImage,
+    target: &NormalizedImage,
+    offset: Offset,
+    minimum_area: u32,
+    source_is_expected: bool,
+    differences: &mut Vec<Difference>,
+) {
+    for bounds in unmatched_canvas_bounds(source, target, offset) {
+        let area = bounds.width.saturating_mul(bounds.height);
+        if area < minimum_area {
+            continue;
+        }
+        let (expected_bounds, actual_bounds) = if source_is_expected {
+            (Some(bounds), None)
+        } else {
+            (None, Some(bounds))
+        };
+        differences.push(changed_component(expected_bounds, actual_bounds, area));
+    }
+}
+
+fn unmatched_canvas_bounds(
+    source: &NormalizedImage,
+    target: &NormalizedImage,
+    offset: Offset,
+) -> Vec<Bounds> {
+    let source_width = i64::from(source.width());
+    let source_height = i64::from(source.height());
+    let valid_left = (-i64::from(offset.x)).clamp(0, source_width);
+    let valid_top = (-i64::from(offset.y)).clamp(0, source_height);
+    let valid_right = (i64::from(target.width()) - i64::from(offset.x)).clamp(0, source_width);
+    let valid_bottom = (i64::from(target.height()) - i64::from(offset.y)).clamp(0, source_height);
+    if valid_left >= valid_right || valid_top >= valid_bottom {
+        return nonzero_bounds(0, 0, source.width(), source.height())
+            .into_iter()
+            .collect();
+    }
+    let left = u32::try_from(valid_left).expect("clamped valid left");
+    let top = u32::try_from(valid_top).expect("clamped valid top");
+    let right = u32::try_from(valid_right).expect("clamped valid right");
+    let bottom = u32::try_from(valid_bottom).expect("clamped valid bottom");
+    [
+        nonzero_bounds(0, 0, source.width(), top),
+        nonzero_bounds(0, bottom, source.width(), source.height() - bottom),
+        nonzero_bounds(0, top, left, bottom - top),
+        nonzero_bounds(right, top, source.width() - right, bottom - top),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+fn nonzero_bounds(x: u32, y: u32, width: u32, height: u32) -> Option<Bounds> {
+    (width > 0 && height > 0).then_some(Bounds {
+        x,
+        y,
+        width,
+        height,
+    })
 }
 
 fn clear_bounds(mask: &mut Mask, bounds: &[Bounds], image: &NormalizedImage) {

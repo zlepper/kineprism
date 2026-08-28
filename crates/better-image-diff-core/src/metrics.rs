@@ -98,10 +98,10 @@ fn window_centers(length: u32) -> Vec<u32> {
     if length <= SSIM_WINDOW_SIZE {
         return vec![length / 2];
     }
-    let mut centers: Vec<u32> = (SSIM_RADIUS as u32..length)
+    let final_center = length - 1 - SSIM_RADIUS as u32;
+    let mut centers: Vec<u32> = (SSIM_RADIUS as u32..=final_center)
         .step_by(SSIM_STRIDE as usize)
         .collect();
-    let final_center = length - 1 - SSIM_RADIUS as u32;
     if centers.last().copied() != Some(final_center) {
         centers.push(final_center);
     }
@@ -210,5 +210,14 @@ mod tests {
         let metrics = calculate(&expected, &actual, &mapping, threshold);
 
         assert_eq!(metrics.changed_pixel_ratio, Some(0.0));
+    }
+
+    #[test]
+    fn ssim_centers_use_only_full_windows_when_the_dimension_is_large_enough() {
+        assert_eq!(window_centers(10), vec![5]);
+        assert_eq!(window_centers(11), vec![5]);
+        assert_eq!(window_centers(12), vec![5, 6]);
+        assert_eq!(window_centers(16), vec![5, 10]);
+        assert_eq!(window_centers(22), vec![5, 13, 16]);
     }
 }

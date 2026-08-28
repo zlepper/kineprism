@@ -70,9 +70,15 @@ fn a_different_canvas_and_pixels_are_summarized() {
     let comparison = compare(&expected, &actual, &options).expect("compare");
 
     assert!(!comparison.equivalent);
-    assert_eq!(comparison.summary.total, 2);
+    assert_eq!(comparison.summary.total, 3);
     assert_eq!(comparison.summary.canvas_size, 1);
-    assert_eq!(comparison.summary.changed, 1);
+    assert_eq!(comparison.summary.changed, 2);
+    assert!(comparison.differences.iter().any(|difference| {
+        difference.expected_bounds.is_none()
+            && difference
+                .actual_bounds
+                .is_some_and(|bounds| bounds.x == 4 && bounds.width == 1)
+    }));
     assert!(comparison.metrics.raw.mae.expect("MAE") > 0.0);
     assert!(comparison.metrics.raw.psnr_db.is_some());
 }

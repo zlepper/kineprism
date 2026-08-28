@@ -33,8 +33,12 @@ fn threshold_zero_reports_a_subtle_same_position_change() {
     };
 
     let comparison = compare(&expected, &actual, &strict).expect("strict comparison");
-    assert_eq!(
-        comparison.summary.changed, 1,
+    assert!(
+        comparison.differences.iter().any(|difference| {
+            difference.kind == DifferenceKind::Changed
+                && difference.expected_bounds.is_some()
+                && difference.actual_bounds.is_some()
+        }),
         "{:?}",
         comparison.differences
     );
@@ -62,8 +66,12 @@ fn a_change_after_global_alignment_is_not_swallowed() {
 
     assert_eq!(comparison.alignment.offset, Offset { x: 6, y: 4 });
     assert_eq!(comparison.summary.moved, 1, "{:?}", comparison.differences);
-    assert_eq!(
-        comparison.summary.changed, 1,
+    assert!(
+        comparison.differences.iter().any(|difference| {
+            difference.kind == DifferenceKind::Changed
+                && difference.expected_bounds.is_some()
+                && difference.actual_bounds.is_some()
+        }),
         "{:?}",
         comparison.differences
     );
@@ -193,9 +201,17 @@ fn full_canvas_texture_global_translation_is_always_reported() {
 
     assert_eq!(comparison.alignment.offset, Offset { x: 5, y: -3 });
     assert_eq!(comparison.summary.moved, 1, "{:?}", comparison.differences);
-    assert_eq!(
-        comparison.summary.changed, 0,
-        "{:?}",
+    assert!(
+        comparison
+            .differences
+            .iter()
+            .filter(|difference| {
+                difference.kind == DifferenceKind::Changed
+                    && (difference.expected_bounds.is_none() || difference.actual_bounds.is_none())
+            })
+            .count()
+            >= 4,
+        "cropped bands should remain visible: {:?}",
         comparison.differences
     );
     assert!(
