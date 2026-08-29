@@ -6,6 +6,21 @@ regions where possible.
 
 It runs locally and deterministically, with no network connection or external service required.
 
+## Test
+
+Install the pinned test runner once:
+
+```console
+cargo install cargo-nextest --version 0.9.143 --locked
+```
+
+Run the workspace test suite and doctests:
+
+```console
+cargo nextest run --workspace --locked
+cargo test --doc --workspace --locked
+```
+
 ## Install
 
 Install from this checkout:
