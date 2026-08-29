@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+use rayon::prelude::*;
 
 use crate::pyramid::{ImagePyramid, PyramidLevel};
 use crate::{Alignment, Offset};
@@ -152,8 +154,7 @@ fn refine_hypotheses(
     requested_limit: u32,
 ) -> HypothesisSet {
     let (x_limit, y_limit) = offset_limits(expected, actual, requested_limit);
-    let mut result = HypothesisSet::new();
-    let mut score_cache = HashMap::new();
+    let mut candidates = Vec::new();
     for hypothesis in previous.entries.into_iter().flatten() {
         let center = Offset {
             x: hypothesis.offset.x.saturating_mul(2),
@@ -165,12 +166,31 @@ fn refine_hypotheses(
                     x: center.x.saturating_add(delta_x).clamp(-x_limit, x_limit),
                     y: center.y.saturating_add(delta_y).clamp(-y_limit, y_limit),
                 };
-                let candidate_score = *score_cache
-                    .entry((candidate.x, candidate.y))
-                    .or_insert_with(|| score(expected, actual, candidate));
-                consider_score(candidate, candidate_score, 3, &mut result);
+                candidates.push(candidate);
             }
         }
+    }
+
+    let mut seen = HashSet::new();
+    let unique_candidates: Vec<_> = candidates
+        .iter()
+        .copied()
+        .filter(|candidate| seen.insert((candidate.x, candidate.y)))
+        .collect();
+    let scores: Vec<_> = unique_candidates
+        .par_iter()
+        .map(|candidate| score(expected, actual, *candidate))
+        .collect();
+    let score_cache: HashMap<_, _> = unique_candidates
+        .into_iter()
+        .zip(scores)
+        .map(|(candidate, score)| ((candidate.x, candidate.y), score))
+        .collect();
+
+    let mut result = HypothesisSet::new();
+    for candidate in candidates {
+        let candidate_score = score_cache[&(candidate.x, candidate.y)];
+        consider_score(candidate, candidate_score, 3, &mut result);
     }
     result
 }
