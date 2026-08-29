@@ -1,10 +1,25 @@
+#![allow(
+    deprecated,
+    reason = "the server intentionally uses MCP Roots as its workspace access boundary"
+)]
+
 use std::fs;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use image::{ImageFormat, Rgba, RgbaImage};
 use rayon::ThreadPoolBuilder;
+use rmcp::{
+    ClientHandler, ServiceExt,
+    model::{
+        CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation, ListRootsResult,
+        Root,
+    },
+    service::{RequestContext, RoleClient},
+    transport::{ConfigureCommandExt, TokioChildProcess},
+};
 
 static NEXT_TEMP_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
@@ -36,14 +51,56 @@ fn command() -> Command {
     Command::new(env!("CARGO_BIN_EXE_better-image-diff"))
 }
 
+struct McpTestClient {
+    root_uri: String,
+}
+
+impl ClientHandler for McpTestClient {
+    fn get_info(&self) -> ClientInfo {
+        ClientInfo::new(
+            ClientCapabilities::builder().enable_roots().build(),
+            Implementation::new("better-image-diff-test", "1"),
+        )
+    }
+
+    fn list_roots(
+        &self,
+        _context: RequestContext<RoleClient>,
+    ) -> impl Future<Output = Result<ListRootsResult, rmcp::ErrorData>> {
+        std::future::ready(Ok(ListRootsResult::new(vec![Root::new(&self.root_uri)])))
+    }
+}
+
+async fn mcp_client(
+    root: &Path,
+) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
+    let transport = TokioChildProcess::new(
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_better-image-diff")).configure(
+            |command| {
+                command.arg("mcp");
+            },
+        ),
+    )?;
+    let client = McpTestClient {
+        root_uri: file_uri(root),
+    }
+    .serve(transport)
+    .await?;
+    Ok(client)
+}
+
+fn file_uri(path: &Path) -> String {
+    format!("file://{}", path.display())
+}
+
 #[test]
 fn help_describes_the_public_arguments() {
     let output = command().arg("--help").output().expect("run CLI");
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("UTF-8 help");
-    assert!(stdout.contains("<EXPECTED>"));
-    assert!(stdout.contains("<ACTUAL>"));
+    assert!(stdout.contains("EXPECTED"));
+    assert!(stdout.contains("ACTUAL"));
     assert!(stdout.contains("--output-dir"));
     assert!(stdout.contains("--max-offset"));
     assert!(stdout.contains("--color-threshold"));
@@ -53,6 +110,129 @@ fn help_describes_the_public_arguments() {
     assert!(stdout.contains("--region-width"));
     assert!(stdout.contains("--region-height"));
     assert!(stdout.contains("--force"));
+    assert!(stdout.contains("mcp"));
+}
+
+#[tokio::test]
+async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let output_directory = directory.path().join("output");
+    let expected = RgbaImage::from_pixel(8, 6, Rgba([20, 30, 40, 255]));
+    expected.save(&expected_path)?;
+    expected.save(&actual_path)?;
+
+    let client = mcp_client(directory.path()).await?;
+    let tools = client.list_all_tools().await?;
+    let tool = tools
+        .iter()
+        .find(|tool| tool.name == "compare_ui_images")
+        .expect("compare_ui_images tool");
+    assert!(
+        tool.description
+            .as_deref()
+            .expect("tool description")
+            .contains("UI screenshot")
+    );
+    assert!(
+        tool.input_schema["required"]
+            .as_array()
+            .expect("required inputs")
+            .iter()
+            .any(|parameter| parameter == "expected_path")
+    );
+
+    let arguments = serde_json::json!({
+        "expected_path": expected_path,
+        "actual_path": actual_path,
+        "output_dir": output_directory,
+    });
+    let first = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(&arguments)),
+        )
+        .await?;
+    assert!(!first.is_error.unwrap_or(false), "{first:?}");
+    let report = first.content[0]
+        .as_text()
+        .expect("report text")
+        .text
+        .as_str();
+    let report: serde_json::Value = serde_json::from_str(report)?;
+    assert_eq!(report["equivalent"], true);
+    for name in ["expected.png", "actual.png", "diff.png", "report.json"] {
+        assert!(output_directory.join(name).is_file(), "missing {name}");
+    }
+
+    let repeated = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(&arguments)),
+        )
+        .await?;
+    assert_eq!(repeated.is_error, Some(true));
+    assert!(
+        repeated.content[0]
+            .as_text()
+            .expect("error text")
+            .text
+            .contains("already exists")
+    );
+
+    let forced = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
+                &serde_json::json!({
+                    "expected_path": expected_path,
+                    "actual_path": actual_path,
+                    "output_dir": output_directory,
+                    "force": true,
+                }),
+            )),
+        )
+        .await?;
+    assert!(!forced.is_error.unwrap_or(false), "{forced:?}");
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn mcp_rejects_paths_outside_workspace_roots() -> Result<(), Box<dyn std::error::Error>> {
+    let root = TestDirectory::new();
+    let outside = TestDirectory::new();
+    let actual_path = root.path().join("actual.png");
+    let expected_path = outside.path().join("expected.png");
+    RgbaImage::new(2, 2).save(&actual_path)?;
+    RgbaImage::new(2, 2).save(&expected_path)?;
+
+    let client = mcp_client(root.path()).await?;
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
+                &serde_json::json!({
+                    "expected_path": expected_path,
+                    "actual_path": actual_path,
+                    "output_dir": root.path().join("output"),
+                }),
+            )),
+        )
+        .await?;
+
+    assert_eq!(result.is_error, Some(true));
+    assert!(
+        result.content[0]
+            .as_text()
+            .expect("error text")
+            .text
+            .contains("outside the MCP workspace roots")
+    );
+    client.cancel().await?;
+    Ok(())
+}
+
+fn json_object(value: &serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+    value.as_object().expect("JSON object").clone()
 }
 
 #[test]

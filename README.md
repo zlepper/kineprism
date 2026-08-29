@@ -44,6 +44,14 @@ better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
 - `--force` replaces the tool's existing output files. Other files in the output directory are
   preserved.
 
+## MCP server
+
+Run a local stdio [Model Context Protocol](https://modelcontextprotocol.io/) server with:
+
+```console
+better-image-diff mcp
+```
+
 ## Results
 
 The command writes a JSON report to stdout and to `report.json` in the output directory. It also

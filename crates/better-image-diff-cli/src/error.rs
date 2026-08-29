@@ -7,6 +7,7 @@ use better_image_diff_core::{CompareError, RenderError};
 
 #[derive(Debug)]
 pub(crate) enum CliError {
+    MissingArgument(&'static str),
     Compare(CompareError),
     Render(RenderError),
     Io {
@@ -31,6 +32,7 @@ pub(crate) enum CliError {
 impl Display for CliError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::MissingArgument(argument) => write!(formatter, "missing required {argument}"),
             Self::Compare(error) => Display::fmt(error, formatter),
             Self::Render(error) => Display::fmt(error, formatter),
             Self::Io {
@@ -80,7 +82,10 @@ impl Error for CliError {
             Self::Io { source, .. } => Some(source),
             Self::Decode { source, .. } | Self::Encode { source, .. } => Some(source),
             Self::Json(error) => Some(error),
-            Self::NotPng(_) | Self::ArtifactExists(_) | Self::ArtifactOverwritesInput(_) => None,
+            Self::MissingArgument(_)
+            | Self::NotPng(_)
+            | Self::ArtifactExists(_)
+            | Self::ArtifactOverwritesInput(_) => None,
         }
     }
 }
