@@ -1,0 +1,228 @@
+name: Publish npm package
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Immutable full commit SHA previously built by the Tests workflow
+        required: true
+        type: string
+      version:
+        description: Cargo package version to publish, without the v prefix
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.version }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out requested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          lfs: true
+          persist-credentials: false
+
+      - name: Validate release inputs
+        env:
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$actual_commit" != "$EXPECTED_COMMIT" ]]; then
+            echo "Requested commit $EXPECTED_COMMIT resolved to $actual_commit, not the exact requested SHA." >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          metadata = json.loads(
+              subprocess.check_output(
+                  ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                  text=True,
+              )
+          )
+          package = next(
+              (item for item in metadata["packages"] if item["name"] == "kineprism"),
+              None,
+          )
+          if package is None:
+              sys.exit("Cargo metadata did not contain the kineprism package.")
+          expected = os.environ["EXPECTED_VERSION"]
+          if package["version"] != expected:
+              sys.exit(
+                  f"Requested version {expected} does not match Cargo version {package['version']}."
+              )
+          PY
+
+          tag="v$EXPECTED_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists; refusing to publish another release for it." >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "GitHub Release $tag already exists; refusing to publish another release for it." >&2
+            exit 1
+          fi
+
+      - name: Resolve successful CI artifact run
+        id: ci-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          run_id="$(gh api \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/test.yml/runs?head_sha=$EXPECTED_COMMIT&status=success&per_page=100" \
+            --jq '.workflow_runs | map(select(.conclusion == "success")) | sort_by(.created_at) | last | .id // empty')"
+          if [[ -z "$run_id" ]]; then
+            echo "No successful Tests workflow run was found for $EXPECTED_COMMIT." >&2
+            exit 1
+          fi
+          echo "Using successful Tests workflow run $run_id for $EXPECTED_COMMIT."
+          echo "id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download CI release binaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          path: downloaded-artifacts
+          merge-multiple: false
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.ci-run.outputs.id }}
+
+      - name: Reassemble and validate release binaries
+        run: |
+          set -euo pipefail
+          targets=(
+            x86_64-unknown-linux-gnu
+            x86_64-unknown-linux-musl
+            aarch64-unknown-linux-gnu
+            aarch64-unknown-linux-musl
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+            x86_64-pc-windows-msvc
+            aarch64-pc-windows-msvc
+          )
+
+          mkdir --parents release-assets
+          for target in "${targets[@]}"; do
+            suffix=""
+            if [[ "$target" == *-windows-* ]]; then
+              suffix=".exe"
+            fi
+
+            source="downloaded-artifacts/binary-$target/kineprism$suffix"
+            destination="target/$target/release/kineprism$suffix"
+            if [[ ! -f "$source" ]]; then
+              echo "Expected CI artifact binary is missing: $source" >&2
+              exit 1
+            fi
+
+            mkdir --parents "$(dirname "$destination")"
+            cp "$source" "$destination"
+            cp "$source" "release-assets/kineprism-$target$suffix"
+            if [[ "$suffix" != ".exe" ]]; then
+              chmod +x "$destination" "release-assets/kineprism-$target$suffix"
+            fi
+          done
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install cargo-npm
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-npm@0.1.4
+
+      - name: Print publishing tool versions
+        run: |
+          node --version
+          npm --version
+          echo "cargo-npm 0.1.4"
+
+      - name: Generate npm packages
+        run: cargo npm generate --package kineprism --out-dir npm
+
+      - name: Validate generated npm packages
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          main_name = "@zlepper/kineprism"
+          platforms = {
+              "@zlepper/kineprism-linux-x64": False,
+              "@zlepper/kineprism-linux-x64-musl": False,
+              "@zlepper/kineprism-linux-arm64": False,
+              "@zlepper/kineprism-linux-arm64-musl": False,
+              "@zlepper/kineprism-darwin-x64": False,
+              "@zlepper/kineprism-darwin-arm64": False,
+              "@zlepper/kineprism-win32-x64": True,
+              "@zlepper/kineprism-win32-arm64": True,
+          }
+          expected_names = {main_name, *platforms}
+          packages = {}
+          for manifest in Path("npm").rglob("package.json"):
+              package = json.loads(manifest.read_text())
+              packages[package["name"]] = (manifest.parent, package)
+
+          if set(packages) != expected_names:
+              sys.exit(
+                  "Generated package names did not match the expected complete set: "
+                  f"{sorted(packages)}"
+              )
+
+          expected_version = os.environ["EXPECTED_VERSION"]
+          for name, (_, package) in packages.items():
+              if package.get("version") != expected_version:
+                  sys.exit(f"{name} has version {package.get('version')}, not {expected_version}.")
+              if "zlepper/kineprism" not in json.dumps(package.get("repository", "")):
+                  sys.exit(f"{name} is missing the canonical repository metadata.")
+
+          main_directory, main = packages[main_name]
+          optional = main.get("optionalDependencies", {})
+          if set(optional) != set(platforms):
+              sys.exit("The main package does not reference every platform package.")
+          if not (main_directory / "bin" / "kineprism.js").is_file():
+              sys.exit("The main package is missing the generated kineprism shim.")
+
+          for name, is_windows in platforms.items():
+              directory, _ = packages[name]
+              binary = directory / ("kineprism.exe" if is_windows else "kineprism")
+              if not binary.is_file():
+                  sys.exit(f"{name} is missing {binary.name}.")
+          PY
+
+      - name: Publish npm packages through Trusted Publishing
+        run: cargo npm publish -- --access public
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$EXPECTED_VERSION" release-assets/* \
+            --target "$EXPECTED_COMMIT" \
+            --title "v$EXPECTED_VERSION" \
+            --generate-notes

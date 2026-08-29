@@ -39,3 +39,91 @@ jobs:
 
       - name: Run doctests
         run: cargo test --doc --workspace --locked
+
+  release-binaries:
+    name: Build ${{ matrix.target }} release binary
+    needs: test
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            binary_suffix: ""
+            musl: false
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+            binary_suffix: ""
+            musl: true
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            binary_suffix: ""
+            musl: false
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            binary_suffix: ""
+            musl: true
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            binary_suffix: ""
+            musl: false
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            binary_suffix: ""
+            musl: false
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            binary_suffix: .exe
+            musl: false
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            binary_suffix: .exe
+            musl: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          targets: ${{ matrix.target }}
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
+          cache-bin: true
+          cache-all-crates: true
+          cache-on-failure: true
+
+      - name: Install native musl tooling
+        if: matrix.musl
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.musl }}" == "true" ]]; then
+            target_key="${{ matrix.target }}"
+            target_key="${target_key^^}"
+            target_key="${target_key//-/_}"
+            export "CARGO_TARGET_${target_key}_LINKER=musl-gcc"
+          fi
+          cargo build --locked --release --package kineprism --bin kineprism --target "${{ matrix.target }}"
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/kineprism${{ matrix.binary_suffix }}
+          if-no-files-found: error
+          compression-level: 0

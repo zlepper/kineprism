@@ -8,7 +8,13 @@ It runs locally and deterministically, with no network connection or external se
 
 ## Install
 
-Install from this checkout:
+Run the packaged CLI through npm:
+
+```console
+npx -y @zlepper/kineprism
+```
+
+Or install from this checkout:
 
 ```console
 cargo install --path crates/kineprism-cli
@@ -50,6 +56,19 @@ Run a local stdio [Model Context Protocol](https://modelcontextprotocol.io/) ser
 
 ```console
 kineprism mcp
+```
+
+An npm-based MCP configuration is:
+
+```json
+{
+  "mcpServers": {
+    "kineprism": {
+      "command": "npx",
+      "args": ["-y", "@zlepper/kineprism", "mcp"]
+    }
+  }
+}
 ```
 
 ## Results
