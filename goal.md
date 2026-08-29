@@ -101,6 +101,7 @@ The exact core module split may be collapsed where a module would otherwise be t
 Declare shared versions under `[workspace.dependencies]` and use only the approved dependency set:
 
 - Core: `image`, with default features disabled, for `RgbaImage` and in-memory buffers. The core must not require a codec feature.
+- Core: `rayon` for deterministic parallel image preparation and alignment-candidate scoring after profiling demonstrated material full-HD improvements.
 - Core: `serde`, using derive support, for reusable report types.
 - CLI: `clap`, using derive support, for argument parsing.
 - CLI: `image`, using the same workspace version, with default features disabled and PNG support enabled for decoding and encoding.
@@ -620,7 +621,7 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 - Reuse computed normalized pixels, edge maps, pyramids, and integral summaries where useful.
 - Reuse normalized buffers and alignment maps for metrics; do not perform another image decode or structural search.
 - Avoid copying full images for each candidate offset.
-- Keep finding generation single-threaded in version one unless profiling demonstrates a need; deterministic behavior is more important than premature parallelism.
+- Use Rayon only for profiled independent work: paired image preparation and alignment-candidate scoring. Keep score reduction, finding generation, connected components, and report assembly sequential so thread count cannot affect results.
 - Do not include timestamps, random identifiers, absolute canonical paths, or nondeterministic map iteration in JSON or artifacts.
 - Add a release-mode smoke benchmark or ignored timing test using a generated 1920x1080 UI screenshot and the default 128 px search radius. It should guard against obviously quadratic full-resolution search behavior without imposing a machine-specific hard timing assertion in the normal test suite.
 

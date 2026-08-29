@@ -4,6 +4,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use image::{ImageFormat, Rgba, RgbaImage};
+use rayon::ThreadPoolBuilder;
 
 static NEXT_TEMP_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
@@ -168,6 +169,44 @@ fn generated_dashboard_card_shift_is_reported_structurally() {
                 .as_f64()
                 .expect("global MAE")
     );
+}
+
+#[test]
+fn realistic_comparison_is_identical_across_rayon_thread_counts() {
+    let fixture_directory =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/deterministic-ui");
+    let expected_fixture = image::open(fixture_directory.join("expected.png"))
+        .expect("open deterministic expected fixture")
+        .to_rgba8();
+    let actual_fixture = image::open(fixture_directory.join("actual.png"))
+        .expect("open deterministic actual fixture")
+        .to_rgba8();
+    let expected = image::imageops::crop_imm(&expected_fixture, 640, 90, 430, 410).to_image();
+    let actual = image::imageops::crop_imm(&actual_fixture, 640, 90, 430, 410).to_image();
+    let options = better_image_diff_core::CompareOptions::default();
+    let serial_pool = ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .expect("build serial Rayon pool");
+    let parallel_pool = ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .expect("build parallel Rayon pool");
+
+    for (name, comparison_actual) in [("identical", &expected), ("changed", &actual)] {
+        let serial = serial_pool
+            .install(|| better_image_diff_core::compare(&expected, comparison_actual, &options))
+            .unwrap_or_else(|error| panic!("serial {name} comparison: {error}"));
+        let parallel = parallel_pool
+            .install(|| better_image_diff_core::compare(&expected, comparison_actual, &options))
+            .unwrap_or_else(|error| panic!("parallel {name} comparison: {error}"));
+
+        assert_eq!(
+            serial, parallel,
+            "{name} comparison changed with thread count"
+        );
+        assert_eq!(serial.equivalent, name == "identical");
+    }
 }
 
 #[test]

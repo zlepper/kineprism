@@ -95,6 +95,7 @@ dependencies = [
  "better-image-diff-core",
  "clap",
  "image",
+ "rayon",
  "serde",
  "serde_json",
 ]
