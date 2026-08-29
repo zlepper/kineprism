@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Rust workspace
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust 1.98.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
+          cache-bin: true
+          cache-all-crates: true
+          cache-on-failure: true
+
+      - name: Run tests
+        run: cargo test --workspace --locked
