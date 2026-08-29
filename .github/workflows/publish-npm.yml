@@ -214,7 +214,15 @@ jobs:
           PY
 
       - name: Publish npm packages through Trusted Publishing
-        run: cargo npm publish -- --access public
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          npm_args=(--access public)
+          if [[ "$EXPECTED_VERSION" == *-* ]]; then
+            prerelease="${EXPECTED_VERSION#*-}"
+            npm_args+=(--tag "${prerelease%%.*}")
+          fi
+          cargo npm publish -- "${npm_args[@]}"
 
       - name: Create GitHub Release
         env:

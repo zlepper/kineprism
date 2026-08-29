@@ -22,8 +22,10 @@ The initial publication is intentionally a temporary local procedure, not a repo
 
 3. After interactive npm login succeeds, have the release coordinator perform the temporary
    artifact download, target-layout assembly, package validation, and
-   `cargo npm publish -- --access public` sequence. The command sequence uses only the binaries
-   from that successful CI run and is deleted afterwards; no npm token or helper is committed.
+   `cargo npm publish` sequence. The command sequence uses only the binaries from that successful
+   CI run and is deleted afterwards; no npm token or helper is committed. Prerelease versions use
+   their leading prerelease identifier as the npm dist-tag (for example, `0.0.1-alpha.1` uses
+   `alpha`); stable releases retain npm's default `latest` tag.
 4. Confirm that all nine package names exist on npm, then configure Trusted Publishing for every
    one. npm requires 2FA and npm 11.15 or newer for `npm trust`:
 
