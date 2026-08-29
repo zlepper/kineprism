@@ -3,9 +3,12 @@
     reason = "MCP Roots is the requested workspace access boundary despite its protocol deprecation"
 )]
 
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
 
-use kineprism_core::{Bounds, CompareOptions};
+use kineprism_core::{Bounds, CompareOptions, Difference};
 use rmcp::{
     RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -69,7 +72,7 @@ struct Region {
 impl ImageDiffServer {
     #[tool(
         name = "compare_ui_images",
-        description = "Compare two UI screenshot PNGs and write a JSON report plus annotated expected.png, actual.png, and diff.png artifacts.",
+        description = "Compare two UI screenshot PNGs, return a compact plain-text summary, and write a detailed JSON report plus annotated expected.png, actual.png, and diff.png artifacts.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -96,10 +99,9 @@ impl ImageDiffServer {
         };
 
         match tokio::task::spawn_blocking(move || comparison::run(&request)).await {
-            Ok(Ok(result)) => match String::from_utf8(result.report_json) {
-                Ok(report) => CallToolResult::success(vec![ContentBlock::text(report)]),
-                Err(error) => tool_error(format!("comparison report was not valid UTF-8: {error}")),
-            },
+            Ok(Ok(result)) => {
+                CallToolResult::success(vec![ContentBlock::text(format_comparison_result(&result))])
+            }
             Ok(Err(error)) => tool_error(error.to_string()),
             Err(error) => tool_error(format!("comparison task failed: {error}")),
         }
@@ -122,6 +124,139 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>
 
 fn tool_error(message: String) -> CallToolResult {
     CallToolResult::error(vec![ContentBlock::text(message)])
+}
+
+fn format_comparison_result(result: &comparison::ComparisonResult) -> String {
+    let comparison = &result.comparison;
+    let mut output = String::new();
+    let outcome = if result.equivalent {
+        "equivalent"
+    } else {
+        "different"
+    };
+    writeln!(output, "Comparison: {outcome}").expect("write to string");
+    write_summary(&mut output, &comparison.summary);
+    writeln!(
+        output,
+        "MAE: raw={}; global-aligned={}; structural-aligned={}",
+        metric_value(comparison.metrics.raw.mae),
+        metric_value(comparison.metrics.global_aligned.mae),
+        metric_value(comparison.metrics.structural_aligned.mae),
+    )
+    .expect("write to string");
+    writeln!(
+        output,
+        "Structural metrics: SSIM={}; changed-pixel-ratio={}",
+        metric_value(comparison.metrics.structural_aligned.ssim),
+        percentage_value(comparison.metrics.structural_aligned.changed_pixel_ratio),
+    )
+    .expect("write to string");
+
+    for difference in &comparison.differences {
+        write_difference(&mut output, difference);
+    }
+    write_suppression(&mut output, &comparison.suppression);
+
+    writeln!(output, "Artifacts:").expect("write to string");
+    writeln!(
+        output,
+        "- annotated expected: {}",
+        result.artifact_paths.expected.display()
+    )
+    .expect("write to string");
+    writeln!(
+        output,
+        "- annotated actual: {}",
+        result.artifact_paths.actual.display()
+    )
+    .expect("write to string");
+    writeln!(output, "- diff: {}", result.artifact_paths.diff.display()).expect("write to string");
+    writeln!(
+        output,
+        "- detailed report: {}",
+        result.artifact_paths.report.display()
+    )
+    .expect("write to string");
+    output
+}
+
+fn write_summary(output: &mut String, summary: &kineprism_core::ComparisonSummary) {
+    if summary.total == 0 {
+        writeln!(output, "Findings: none").expect("write to string");
+        return;
+    }
+
+    let mut counts = Vec::new();
+    for (kind, count) in [
+        ("moved", summary.moved),
+        ("resized", summary.resized),
+        ("added", summary.added),
+        ("removed", summary.removed),
+        ("changed", summary.changed),
+        ("canvas-size", summary.canvas_size),
+    ] {
+        if count > 0 {
+            counts.push(format!("{kind}={count}"));
+        }
+    }
+    writeln!(
+        output,
+        "Findings: {} total ({})",
+        summary.total,
+        counts.join(", ")
+    )
+    .expect("write to string");
+}
+
+fn write_difference(output: &mut String, difference: &Difference) {
+    let message_prefix = format!("{}: ", difference.id);
+    let message = difference
+        .message
+        .strip_prefix(&message_prefix)
+        .unwrap_or(&difference.message);
+    write!(output, "- {} {}: {message}", difference.id, difference.kind).expect("write to string");
+    if let Some(bounds) = difference.expected_bounds {
+        write!(
+            output,
+            "; expected=(x={},y={},width={},height={})",
+            bounds.x, bounds.y, bounds.width, bounds.height
+        )
+        .expect("write to string");
+    }
+    if let Some(bounds) = difference.actual_bounds {
+        write!(
+            output,
+            "; actual=(x={},y={},width={},height={})",
+            bounds.x, bounds.y, bounds.width, bounds.height
+        )
+        .expect("write to string");
+    }
+    if let Some(offset) = difference.offset {
+        write!(output, "; offset=({:+},{:+})", offset.x, offset.y).expect("write to string");
+    }
+    writeln!(output, "; confidence={:.3}", difference.confidence).expect("write to string");
+}
+
+fn write_suppression(output: &mut String, suppression: &kineprism_core::SuppressionSummary) {
+    if suppression.movement_border_regions > 0 {
+        writeln!(
+            output,
+            "Suppressed residuals: {} region(s), {} px; see the detailed report.",
+            suppression.movement_border_regions, suppression.movement_border_pixels
+        )
+        .expect("write to string");
+    }
+}
+
+fn metric_value(value: Option<f64>) -> String {
+    value.map_or_else(|| "n/a".to_owned(), |value| format!("{value:.6}"))
+}
+
+fn percentage_value(value: Option<f64>) -> String {
+    value.map_or_else(
+        || "n/a".to_owned(),
+        |value| format!("{:.2}%", value * 100.0),
+    )
 }
 
 fn comparison_request(

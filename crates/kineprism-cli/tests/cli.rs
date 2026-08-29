@@ -151,16 +151,27 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
         )
         .await?;
     assert!(!first.is_error.unwrap_or(false), "{first:?}");
-    let report = first.content[0]
+    let response = first.content[0]
         .as_text()
         .expect("report text")
         .text
         .as_str();
-    let report: serde_json::Value = serde_json::from_str(report)?;
-    assert_eq!(report["equivalent"], true);
+    assert!(response.starts_with("Comparison: equivalent"), "{response}");
+    assert!(response.contains("MAE: raw="), "{response}");
+    assert!(response.contains("Structural metrics: SSIM="), "{response}");
+    assert!(response.contains("Findings: none"), "{response}");
     for name in ["expected.png", "actual.png", "diff.png", "report.json"] {
-        assert!(output_directory.join(name).is_file(), "missing {name}");
+        let artifact = output_directory.join(name);
+        assert!(artifact.is_file(), "missing {name}");
+        assert!(
+            response.contains(&artifact.display().to_string()),
+            "response omitted artifact path '{}': {response}",
+            artifact.display()
+        );
     }
+    let detailed_report: serde_json::Value =
+        serde_json::from_slice(&fs::read(output_directory.join("report.json"))?)?;
+    assert_eq!(detailed_report["equivalent"], true);
 
     let repeated = client
         .call_tool(
@@ -189,6 +200,56 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
         )
         .await?;
     assert!(!forced.is_error.unwrap_or(false), "{forced:?}");
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn mcp_text_result_reports_metrics_and_findings() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let output_directory = directory.path().join("output");
+    let expected = RgbaImage::from_pixel(12, 10, Rgba([245, 245, 245, 255]));
+    let mut actual = expected.clone();
+    for y in 3..7 {
+        for x in 4..8 {
+            actual.put_pixel(x, y, Rgba([20, 30, 40, 255]));
+        }
+    }
+    expected.save(&expected_path)?;
+    actual.save(&actual_path)?;
+
+    let client = mcp_client(directory.path()).await?;
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
+                &serde_json::json!({
+                    "expected_path": expected_path,
+                    "actual_path": actual_path,
+                    "output_dir": output_directory,
+                }),
+            )),
+        )
+        .await?;
+
+    assert!(!result.is_error.unwrap_or(false), "{result:?}");
+    let response = result.content[0]
+        .as_text()
+        .expect("report text")
+        .text
+        .as_str();
+    assert!(response.starts_with("Comparison: different"), "{response}");
+    assert!(response.contains("MAE: raw="), "{response}");
+    assert!(response.contains("global-aligned="), "{response}");
+    assert!(response.contains("structural-aligned="), "{response}");
+    assert!(response.contains("Structural metrics: SSIM="), "{response}");
+    assert!(response.contains("changed-pixel-ratio="), "{response}");
+    assert!(response.contains("Findings: "), "{response}");
+    assert!(response.contains("- D1 "), "{response}");
+    assert!(response.contains("confidence="), "{response}");
+    assert!(!response.trim_start().starts_with('{'), "{response}");
+
     client.cancel().await?;
     Ok(())
 }

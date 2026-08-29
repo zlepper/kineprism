@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use kineprism_core::{CompareOptions, compare, render_artifacts};
+use kineprism_core::{CompareOptions, Comparison, compare, render_artifacts};
 
 use crate::artifacts::ArtifactPaths;
 use crate::error::CliError;
@@ -17,6 +17,8 @@ pub(crate) struct ComparisonRequest {
 pub(crate) struct ComparisonResult {
     pub(crate) equivalent: bool,
     pub(crate) report_json: Vec<u8>,
+    pub(crate) comparison: Comparison,
+    pub(crate) artifact_paths: ArtifactPaths,
 }
 
 pub(crate) fn run(request: &ComparisonRequest) -> Result<ComparisonResult, CliError> {
@@ -41,6 +43,8 @@ pub(crate) fn run(request: &ComparisonRequest) -> Result<ComparisonResult, CliEr
     Ok(ComparisonResult {
         equivalent: comparison.equivalent,
         report_json,
+        comparison,
+        artifact_paths,
     })
 }
 
