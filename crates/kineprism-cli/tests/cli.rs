@@ -50,38 +50,53 @@ fn command() -> Command {
 }
 
 struct McpTestClient {
-    root_uri: String,
+    root_uri: Option<String>,
 }
 
 impl ClientHandler for McpTestClient {
     fn get_info(&self) -> ClientInfo {
-        ClientInfo::new(
-            ClientCapabilities::builder().enable_roots().build(),
-            Implementation::new("kineprism-test", "1"),
-        )
+        let capabilities = if self.root_uri.is_some() {
+            ClientCapabilities::builder().enable_roots().build()
+        } else {
+            ClientCapabilities::builder().build()
+        };
+        ClientInfo::new(capabilities, Implementation::new("kineprism-test", "1"))
     }
 
     fn list_roots(
         &self,
         _context: RequestContext<RoleClient>,
     ) -> impl Future<Output = Result<ListRootsResult, rmcp::ErrorData>> {
-        std::future::ready(Ok(ListRootsResult::new(vec![Root::new(&self.root_uri)])))
+        let roots = self
+            .root_uri
+            .as_deref()
+            .map_or_else(Vec::new, |uri| vec![Root::new(uri)]);
+        std::future::ready(Ok(ListRootsResult::new(roots)))
     }
 }
 
 async fn mcp_client(
     root: &Path,
 ) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
+    mcp_client_with_roots(root, Some(file_uri(root))).await
+}
+
+async fn mcp_client_without_roots(
+    root: &Path,
+) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
+    mcp_client_with_roots(root, None).await
+}
+
+async fn mcp_client_with_roots(
+    root: &Path,
+    root_uri: Option<String>,
+) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
     let transport = TokioChildProcess::new(
         tokio::process::Command::new(env!("CARGO_BIN_EXE_kineprism")).configure(|command| {
-            command.arg("mcp");
+            command.arg("mcp").current_dir(root);
         }),
     )?;
-    let client = McpTestClient {
-        root_uri: file_uri(root),
-    }
-    .serve(transport)
-    .await?;
+    let client = McpTestClient { root_uri }.serve(transport).await?;
     Ok(client)
 }
 
@@ -249,6 +264,43 @@ async fn mcp_text_result_reports_metrics_and_findings() -> Result<(), Box<dyn st
     assert!(response.contains("- D1 "), "{response}");
     assert!(response.contains("confidence="), "{response}");
     assert!(!response.trim_start().starts_with('{'), "{response}");
+
+    client.cancel().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn mcp_uses_its_working_directory_when_the_client_supplies_no_roots()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let output_directory = directory.path().join("output");
+    let image = RgbaImage::from_pixel(8, 6, Rgba([20, 30, 40, 255]));
+    image.save(&expected_path)?;
+    image.save(&actual_path)?;
+
+    let client = mcp_client_without_roots(directory.path()).await?;
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
+                &serde_json::json!({
+                    "expected_path": expected_path,
+                    "actual_path": actual_path,
+                    "output_dir": output_directory,
+                }),
+            )),
+        )
+        .await?;
+
+    assert!(!result.is_error.unwrap_or(false), "{result:?}");
+    let response = result.content[0]
+        .as_text()
+        .expect("report text")
+        .text
+        .as_str();
+    assert!(response.starts_with("Comparison: equivalent"), "{response}");
+    assert!(output_directory.join("report.json").is_file());
 
     client.cancel().await?;
     Ok(())

@@ -86,12 +86,12 @@ impl ImageDiffServer {
         context: RequestContext<RoleServer>,
     ) -> CallToolResult {
         let roots = match context.peer.list_roots().await {
-            Ok(result) => result.roots,
-            Err(error) => {
-                return tool_error(format!(
-                    "could not obtain MCP workspace roots; this tool requires the client Roots capability: {error}"
-                ));
-            }
+            Ok(result) if !result.roots.is_empty() => canonical_root_paths(&result.roots),
+            Ok(_) | Err(_) => working_directory_root(),
+        };
+        let roots = match roots {
+            Ok(roots) => roots,
+            Err(error) => return tool_error(error),
         };
         let request = match comparison_request(request, &roots) {
             Ok(request) => request,
@@ -112,7 +112,7 @@ impl ImageDiffServer {
 #[tool_handler(
     router = self.tool_router,
     name = "kineprism",
-    instructions = "Use compare_ui_images to compare PNG screenshots of user interfaces. All paths must be absolute and under an MCP workspace root."
+    instructions = "Use compare_ui_images to compare PNG screenshots of user interfaces. All paths must be absolute and under an MCP workspace root, or under the server's working directory when the client supplies no roots."
 )]
 impl ServerHandler for ImageDiffServer {}
 
@@ -261,12 +261,11 @@ fn percentage_value(value: Option<f64>) -> String {
 
 fn comparison_request(
     request: CompareUiImagesRequest,
-    roots: &[Root],
+    roots: &[PathBuf],
 ) -> Result<ComparisonRequest, String> {
-    let roots = canonical_root_paths(roots)?;
-    let expected = validate_existing_path("expected_path", &request.expected_path, &roots)?;
-    let actual = validate_existing_path("actual_path", &request.actual_path, &roots)?;
-    let output_dir = validate_output_directory(&request.output_dir, &roots)?;
+    let expected = validate_existing_path("expected_path", &request.expected_path, roots)?;
+    let actual = validate_existing_path("actual_path", &request.actual_path, roots)?;
+    let output_dir = validate_output_directory(&request.output_dir, roots)?;
     let defaults = CompareOptions::default();
 
     Ok(ComparisonRequest {
@@ -289,10 +288,6 @@ fn comparison_request(
 }
 
 fn canonical_root_paths(roots: &[Root]) -> Result<Vec<PathBuf>, String> {
-    if roots.is_empty() {
-        return Err("the client supplied no MCP workspace roots".to_string());
-    }
-
     roots
         .iter()
         .map(|root| {
@@ -308,6 +303,25 @@ fn canonical_root_paths(roots: &[Root]) -> Result<Vec<PathBuf>, String> {
             Ok(canonical)
         })
         .collect()
+}
+
+fn working_directory_root() -> Result<Vec<PathBuf>, String> {
+    let working_directory = std::env::current_dir().map_err(|error| {
+        format!("could not determine the MCP server working directory: {error}")
+    })?;
+    let canonical = std::fs::canonicalize(&working_directory).map_err(|error| {
+        format!(
+            "could not resolve MCP server working directory '{}': {error}",
+            working_directory.display()
+        )
+    })?;
+    if !canonical.is_dir() {
+        return Err(format!(
+            "MCP server working directory '{}' is not a directory",
+            canonical.display()
+        ));
+    }
+    Ok(vec![canonical])
 }
 
 fn file_uri_to_path(uri: &str) -> Result<PathBuf, String> {
