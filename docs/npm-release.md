@@ -8,7 +8,7 @@ token or local bootstrap procedure is required.
 ## Normal releases
 
 1. Update the Cargo version, commit it, and push the commit.
-2. Create and push a matching `v<version>` tag, for example `v0.0.1-alpha.1`.
+2. Create and push a matching `v<version>` tag, for example `v0.0.1-alpha.2`.
 3. The **Publish npm package** workflow validates that the tag version matches Cargo metadata,
    builds the complete native-binary matrix, publishes every npm package through OIDC, and creates
    the GitHub Release with the release binaries attached.
