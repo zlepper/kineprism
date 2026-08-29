@@ -32,7 +32,7 @@ jobs:
           cache-on-failure: true
 
       - name: Install cargo-nextest
-        run: cargo install cargo-nextest --version 0.9.143 --locked
+        uses: taiki-e/install-action@nextest
 
       - name: Run tests with Nextest
         run: cargo nextest run --workspace --locked
