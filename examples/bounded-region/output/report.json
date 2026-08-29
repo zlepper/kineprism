@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "equivalent": false,
+  "expected": {
+    "path": "examples/deterministic-ui/expected.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "actual": {
+    "path": "examples/deterministic-ui/actual.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "settings": {
+    "max_offset": 128,
+    "color_threshold": 2.3,
+    "min_region_area": 16,
+    "region": {
+      "x": 5,
+      "y": 5,
+      "width": 714,
+      "height": 1076
+    }
+  },
+  "alignment": {
+    "offset": {
+      "x": 0,
+      "y": 0
+    },
+    "confidence": 0.0
+  },
+  "metrics": {
+    "raw": {
+      "compared_pixels": 768264,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.01602619911699014,
+      "rmse": 0.09209735257322212,
+      "psnr_db": 20.715057076707154,
+      "ssim": 0.909559420831286,
+      "changed_pixel_ratio": 0.06369034602688659
+    },
+    "global_aligned": {
+      "compared_pixels": 768264,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.01602619911699014,
+      "rmse": 0.09209735257322212,
+      "psnr_db": 20.715057076707154,
+      "ssim": 0.909559420831286,
+      "changed_pixel_ratio": 0.06369034602688659
+    },
+    "structural_aligned": {
+      "compared_pixels": 748591,
+      "expected_coverage": 0.9743929170181084,
+      "actual_coverage": 0.9743929170181084,
+      "mae": 0.00007737504804473927,
+      "rmse": 0.0013892873141186745,
+      "psnr_db": 57.144158598093554,
+      "ssim": 0.9984472374398686,
+      "changed_pixel_ratio": 0.0000814864191527817
+    }
+  },
+  "summary": {
+    "total": 2,
+    "moved": 2,
+    "resized": 0,
+    "added": 0,
+    "removed": 0,
+    "changed": 0,
+    "canvas_size": 0
+  },
+  "suppression": {
+    "movement_border_regions": 2,
+    "movement_border_pixels": 35,
+    "message": "Suppressed 2 small residual regions (35 px) bordering validated movements. Recheck them after correcting the reported movements."
+  },
+  "differences": [
+    {
+      "id": "D1",
+      "kind": "moved",
+      "expected_bounds": {
+        "x": 672,
+        "y": 125,
+        "width": 47,
+        "height": 279
+      },
+      "actual_bounds": {
+        "x": 672,
+        "y": 187,
+        "width": 47,
+        "height": 279
+      },
+      "offset": {
+        "x": 0,
+        "y": 62
+      },
+      "confidence": 1.0,
+      "message": "D1: Region appears 62 px down instead of at its expected position."
+    },
+    {
+      "id": "D2",
+      "kind": "moved",
+      "expected_bounds": {
+        "x": 291,
+        "y": 431,
+        "width": 428,
+        "height": 600
+      },
+      "actual_bounds": {
+        "x": 291,
+        "y": 474,
+        "width": 428,
+        "height": 600
+      },
+      "offset": {
+        "x": 0,
+        "y": 43
+      },
+      "confidence": 1.0,
+      "message": "D2: Region appears 43 px down instead of at its expected position."
+    }
+  ],
+  "artifacts": {
+    "expected": "examples/bounded-region/output/expected.png",
+    "actual": "examples/bounded-region/output/actual.png",
+    "diff": "examples/bounded-region/output/diff.png"
+  }
+}

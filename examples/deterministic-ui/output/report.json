@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "equivalent": false,
+  "expected": {
+    "path": "examples/deterministic-ui/expected.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "actual": {
+    "path": "examples/deterministic-ui/actual.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "settings": {
+    "max_offset": 128,
+    "color_threshold": 2.3,
+    "min_region_area": 16
+  },
+  "alignment": {
+    "offset": {
+      "x": 0,
+      "y": 0
+    },
+    "confidence": 0.0
+  },
+  "metrics": {
+    "raw": {
+      "compared_pixels": 1572528,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.02567465561748485,
+      "rmse": 0.11742159665549816,
+      "psnr_db": 18.605040370845202,
+      "ssim": 0.8672350721882389,
+      "changed_pixel_ratio": 0.10706327645676261
+    },
+    "global_aligned": {
+      "compared_pixels": 1572528,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.02567465561748485,
+      "rmse": 0.11742159665549816,
+      "psnr_db": 18.605040370845202,
+      "ssim": 0.8672350721882389,
+      "changed_pixel_ratio": 0.10706327645676261
+    },
+    "structural_aligned": {
+      "compared_pixels": 1514730,
+      "expected_coverage": 0.9632451695613687,
+      "actual_coverage": 0.9632451695613687,
+      "mae": 0.00010574271031490931,
+      "rmse": 0.001571835881872773,
+      "psnr_db": 56.071856027483236,
+      "ssim": 0.9991634044304257,
+      "changed_pixel_ratio": 0.00007063965195117282
+    }
+  },
+  "summary": {
+    "total": 3,
+    "moved": 3,
+    "resized": 0,
+    "added": 0,
+    "removed": 0,
+    "changed": 0,
+    "canvas_size": 0
+  },
+  "suppression": {
+    "movement_border_regions": 3,
+    "movement_border_pixels": 61,
+    "message": "Suppressed 3 small residual regions (61 px) bordering validated movements. Recheck them after correcting the reported movements."
+  },
+  "differences": [
+    {
+      "id": "D1",
+      "kind": "moved",
+      "expected_bounds": {
+        "x": 672,
+        "y": 125,
+        "width": 360,
+        "height": 279
+      },
+      "actual_bounds": {
+        "x": 672,
+        "y": 187,
+        "width": 360,
+        "height": 279
+      },
+      "offset": {
+        "x": 0,
+        "y": 62
+      },
+      "confidence": 1.0,
+      "message": "D1: Region appears 62 px down instead of at its expected position."
+    },
+    {
+      "id": "D2",
+      "kind": "moved",
+      "expected_bounds": {
+        "x": 291,
+        "y": 431,
+        "width": 712,
+        "height": 600
+      },
+      "actual_bounds": {
+        "x": 291,
+        "y": 474,
+        "width": 712,
+        "height": 600
+      },
+      "offset": {
+        "x": 0,
+        "y": 43
+      },
+      "confidence": 1.0,
+      "message": "D2: Region appears 43 px down instead of at its expected position."
+    },
+    {
+      "id": "D3",
+      "kind": "moved",
+      "expected_bounds": {
+        "x": 1024,
+        "y": 431,
+        "width": 389,
+        "height": 599
+      },
+      "actual_bounds": {
+        "x": 1024,
+        "y": 474,
+        "width": 389,
+        "height": 599
+      },
+      "offset": {
+        "x": 0,
+        "y": 43
+      },
+      "confidence": 1.0,
+      "message": "D3: Region appears 43 px down instead of at its expected position."
+    }
+  ],
+  "artifacts": {
+    "expected": "examples/deterministic-ui/output/expected.png",
+    "actual": "examples/deterministic-ui/output/actual.png",
+    "diff": "examples/deterministic-ui/output/diff.png"
+  }
+}

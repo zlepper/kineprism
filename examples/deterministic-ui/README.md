@@ -33,7 +33,23 @@ cargo run --release -p better-image-diff -- \
   --output-dir examples/deterministic-ui/output
 ```
 
-Exit code `1` is expected because the images intentionally differ. The generated `report.json` and
-annotated PNGs are written to the ignored `output/` directory. The expected primary result is three
-movement findings; the tiny shadow fringes at their borders are counted in the report's structured
-suppression note rather than emitted as independent red `changed` findings.
+Exit code `1` is expected because the images intentionally differ. The expected primary result is
+three movement findings; the tiny shadow fringes at their borders are counted in the report's
+structured suppression note rather than emitted as independent red `changed` findings.
+
+## Output
+
+The generated artifacts are committed so the example can be inspected without running the CLI.
+See the machine-readable [`report.json`](output/report.json) for exact metrics and findings.
+
+### Annotated expected image
+
+![Deterministic UI annotated expected image](output/expected.png)
+
+### Annotated actual image
+
+![Deterministic UI annotated actual image](output/actual.png)
+
+### Structural diff
+
+![Deterministic UI structural diff](output/diff.png)

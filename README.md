@@ -286,6 +286,10 @@ the changed image with ImageMagick instead of generative editing. It moves the m
 by 62 pixels and moves both panels below it down by 43 pixels, reproducing the original layout
 reflow with exact, documented ground truth and no resizing.
 
+[`examples/bounded-region`](examples/bounded-region) compares that deterministic pair through a
+five-pixel-inset mask covering only the left half. It demonstrates full-screen finding coordinates,
+the dashed cyan boundary, two visible movements, and the omission of the right-side activity panel.
+
 ## Limitations
 
 - Inputs are PNG only. JPEG, WebP, GIF, SVG, and animation are unsupported.
@@ -299,7 +303,9 @@ reflow with exact, documented ground truth and no resizing.
 
 ## Development
 
-The supported Rust version is 1.98 or newer. The final validation matrix is:
+The supported Rust version is 1.98 or newer. `rust-toolchain.toml` pins this workspace to 1.98.0
+with the `rustfmt` and `clippy` components, so Rustup-backed Cargo commands select the correct
+toolchain automatically. The final validation matrix is:
 
 ```console
 cargo fmt --all -- --check

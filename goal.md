@@ -52,6 +52,7 @@ Create a Rust 2024 workspace containing a reusable library crate and a thin CLI 
 better-image-diff/
 ├── Cargo.toml
 ├── Cargo.lock
+├── rust-toolchain.toml
 ├── README.md
 ├── goal.md
 └── crates/
@@ -77,7 +78,7 @@ better-image-diff/
             └── cli.rs
 ```
 
-The library package and crate are named `better-image-diff-core` and `better_image_diff_core`. The CLI package and executable are named `better-image-diff`. The workspace root is virtual and uses resolver version 2.
+The library package and crate are named `better-image-diff-core` and `better_image_diff_core`. The CLI package and executable are named `better-image-diff`. The workspace root is virtual and uses resolver version 2. A `rust-toolchain.toml` file pins Rust 1.98.0 with the minimal profile plus the `rustfmt` and `clippy` components, so Rustup-backed Cargo commands automatically select the supported toolchain.
 
 All image-analysis, matching, classification, metric calculation, report-domain types, and annotation rendering belong to the core crate. The CLI crate is limited to:
 

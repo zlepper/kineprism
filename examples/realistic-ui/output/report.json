@@ -1,0 +1,1196 @@
+{
+  "schema_version": 1,
+  "equivalent": false,
+  "expected": {
+    "path": "examples/realistic-ui/expected.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "actual": {
+    "path": "examples/realistic-ui/actual.png",
+    "width": 1448,
+    "height": 1086
+  },
+  "settings": {
+    "max_offset": 128,
+    "color_threshold": 2.3,
+    "min_region_area": 16
+  },
+  "alignment": {
+    "offset": {
+      "x": 0,
+      "y": 0
+    },
+    "confidence": 0.0
+  },
+  "metrics": {
+    "raw": {
+      "compared_pixels": 1572528,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.029702929684925564,
+      "rmse": 0.1184429296125385,
+      "psnr_db": 18.529817182894806,
+      "ssim": 0.8595712315850421,
+      "changed_pixel_ratio": 0.1529886908214035
+    },
+    "global_aligned": {
+      "compared_pixels": 1572528,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.029702929684925564,
+      "rmse": 0.1184429296125385,
+      "psnr_db": 18.529817182894806,
+      "ssim": 0.8595712315850421,
+      "changed_pixel_ratio": 0.1529886908214035
+    },
+    "structural_aligned": {
+      "compared_pixels": 1572528,
+      "expected_coverage": 1.0,
+      "actual_coverage": 1.0,
+      "mae": 0.029702929684925564,
+      "rmse": 0.1184429296125385,
+      "psnr_db": 18.529817182894806,
+      "ssim": 0.8595712315850421,
+      "changed_pixel_ratio": 0.1529886908214035
+    }
+  },
+  "summary": {
+    "total": 68,
+    "moved": 0,
+    "resized": 14,
+    "added": 12,
+    "removed": 15,
+    "changed": 27,
+    "canvas_size": 0
+  },
+  "suppression": {
+    "movement_border_regions": 0,
+    "movement_border_pixels": 0
+  },
+  "differences": [
+    {
+      "id": "D1",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 261,
+        "height": 1086
+      },
+      "actual_bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 260,
+        "height": 1086
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "confidence": 0.7545326422455183,
+      "message": "D1: Region resized from 261x1086 to 260x1086."
+    },
+    {
+      "id": "D2",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 1339,
+        "y": 29,
+        "width": 51,
+        "height": 55
+      },
+      "actual_bounds": {
+        "x": 1339,
+        "y": 29,
+        "width": 51,
+        "height": 55
+      },
+      "confidence": 0.95,
+      "message": "D2: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D3",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 915,
+        "y": 30,
+        "width": 332,
+        "height": 53
+      },
+      "actual_bounds": {
+        "x": 915,
+        "y": 30,
+        "width": 332,
+        "height": 53
+      },
+      "confidence": 0.95,
+      "message": "D3: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D4",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 332,
+        "y": 35,
+        "width": 5,
+        "height": 22
+      },
+      "actual_bounds": {
+        "x": 332,
+        "y": 36,
+        "width": 5,
+        "height": 21
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D4: Region resized from 5x22 to 5x21."
+    },
+    {
+      "id": "D5",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 408,
+        "y": 35,
+        "width": 56,
+        "height": 22
+      },
+      "confidence": 0.8,
+      "message": "D5: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D6",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 496,
+        "y": 35,
+        "width": 5,
+        "height": 22
+      },
+      "actual_bounds": {
+        "x": 496,
+        "y": 36,
+        "width": 5,
+        "height": 21
+      },
+      "confidence": 0.95,
+      "message": "D6: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D7",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 294,
+        "y": 36,
+        "width": 25,
+        "height": 21
+      },
+      "actual_bounds": {
+        "x": 294,
+        "y": 36,
+        "width": 37,
+        "height": 23
+      },
+      "confidence": 0.6169212690951822,
+      "message": "D7: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D8",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 408,
+        "y": 36,
+        "width": 41,
+        "height": 24
+      },
+      "confidence": 0.8,
+      "message": "D8: Actual image contains an additional region."
+    },
+    {
+      "id": "D9",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 450,
+        "y": 36,
+        "width": 21,
+        "height": 26
+      },
+      "confidence": 0.8,
+      "message": "D9: Actual image contains an additional region."
+    },
+    {
+      "id": "D10",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 477,
+        "y": 36,
+        "width": 18,
+        "height": 21
+      },
+      "actual_bounds": {
+        "x": 477,
+        "y": 36,
+        "width": 18,
+        "height": 21
+      },
+      "confidence": 0.95,
+      "message": "D10: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D11",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 317,
+        "y": 37,
+        "width": 14,
+        "height": 20
+      },
+      "confidence": 0.8,
+      "message": "D11: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D12",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 502,
+        "y": 37,
+        "width": 27,
+        "height": 23
+      },
+      "actual_bounds": {
+        "x": 502,
+        "y": 37,
+        "width": 27,
+        "height": 23
+      },
+      "confidence": 0.95,
+      "message": "D12: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D13",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 365,
+        "y": 40,
+        "width": 23,
+        "height": 20
+      },
+      "confidence": 0.8,
+      "message": "D13: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D14",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 1281,
+        "y": 40,
+        "width": 26,
+        "height": 31
+      },
+      "actual_bounds": {
+        "x": 1281,
+        "y": 41,
+        "width": 26,
+        "height": 30
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D14: Region resized from 26x31 to 26x30."
+    },
+    {
+      "id": "D15",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 338,
+        "y": 41,
+        "width": 27,
+        "height": 18
+      },
+      "actual_bounds": {
+        "x": 338,
+        "y": 42,
+        "width": 27,
+        "height": 17
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D15: Region resized from 27x18 to 27x17."
+    },
+    {
+      "id": "D16",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 388,
+        "y": 41,
+        "width": 13,
+        "height": 16
+      },
+      "confidence": 0.8,
+      "message": "D16: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D17",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 366,
+        "y": 42,
+        "width": 35,
+        "height": 16
+      },
+      "confidence": 0.8,
+      "message": "D17: Actual image contains an additional region."
+    },
+    {
+      "id": "D18",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 464,
+        "y": 52,
+        "width": 7,
+        "height": 9
+      },
+      "confidence": 0.8,
+      "message": "D18: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D19",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 1402,
+        "y": 53,
+        "width": 13,
+        "height": 8
+      },
+      "actual_bounds": {
+        "x": 1402,
+        "y": 53,
+        "width": 12,
+        "height": 8
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "confidence": 0.5,
+      "message": "D19: Region resized from 13x8 to 12x8."
+    },
+    {
+      "id": "D20",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 398,
+        "y": 70,
+        "width": 10,
+        "height": 10
+      },
+      "actual_bounds": {
+        "x": 398,
+        "y": 70,
+        "width": 10,
+        "height": 10
+      },
+      "confidence": 0.7,
+      "message": "D20: A 40 px region contains otherwise unexplained visual differences."
+    },
+    {
+      "id": "D21",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 497,
+        "y": 70,
+        "width": 10,
+        "height": 8
+      },
+      "actual_bounds": {
+        "x": 497,
+        "y": 70,
+        "width": 10,
+        "height": 8
+      },
+      "confidence": 0.7,
+      "message": "D21: A 40 px region contains otherwise unexplained visual differences."
+    },
+    {
+      "id": "D22",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 334,
+        "y": 72,
+        "width": 9,
+        "height": 5
+      },
+      "actual_bounds": {
+        "x": 334,
+        "y": 72,
+        "width": 9,
+        "height": 5
+      },
+      "confidence": 0.7,
+      "message": "D22: A 18 px region contains otherwise unexplained visual differences."
+    },
+    {
+      "id": "D23",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 380,
+        "y": 72,
+        "width": 12,
+        "height": 7
+      },
+      "actual_bounds": {
+        "x": 380,
+        "y": 72,
+        "width": 12,
+        "height": 7
+      },
+      "confidence": 0.7,
+      "message": "D23: A 25 px region contains otherwise unexplained visual differences."
+    },
+    {
+      "id": "D24",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 294,
+        "y": 73,
+        "width": 11,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 294,
+        "y": 73,
+        "width": 11,
+        "height": 15
+      },
+      "confidence": 0.95,
+      "message": "D24: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D25",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 316,
+        "y": 73,
+        "width": 18,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 316,
+        "y": 74,
+        "width": 19,
+        "height": 14
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D25: Region resized from 18x15 to 19x14."
+    },
+    {
+      "id": "D26",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 361,
+        "y": 73,
+        "width": 8,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 361,
+        "y": 73,
+        "width": 17,
+        "height": 15
+      },
+      "confidence": 0.5,
+      "message": "D26: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D27",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 402,
+        "y": 73,
+        "width": 18,
+        "height": 16
+      },
+      "confidence": 0.8,
+      "message": "D27: Actual image contains an additional region."
+    },
+    {
+      "id": "D28",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 403,
+        "y": 73,
+        "width": 8,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 512,
+        "y": 73,
+        "width": 8,
+        "height": 15
+      },
+      "confidence": 0.5,
+      "message": "D28: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D29",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 505,
+        "y": 73,
+        "width": 16,
+        "height": 15
+      },
+      "confidence": 0.8,
+      "message": "D29: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D30",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 565,
+        "y": 73,
+        "width": 19,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 565,
+        "y": 73,
+        "width": 19,
+        "height": 15
+      },
+      "confidence": 0.95,
+      "message": "D30: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D31",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 634,
+        "y": 73,
+        "width": 45,
+        "height": 19
+      },
+      "confidence": 0.8,
+      "message": "D31: Actual image contains an additional region."
+    },
+    {
+      "id": "D32",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 652,
+        "y": 73,
+        "width": 27,
+        "height": 19
+      },
+      "confidence": 0.8,
+      "message": "D32: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D33",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 635,
+        "y": 74,
+        "width": 16,
+        "height": 14
+      },
+      "confidence": 0.8,
+      "message": "D33: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D34",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 379,
+        "y": 75,
+        "width": 10,
+        "height": 13
+      },
+      "actual_bounds": {
+        "x": 379,
+        "y": 75,
+        "width": 6,
+        "height": 13
+      },
+      "confidence": 0.6,
+      "message": "D34: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D35",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 505,
+        "y": 75,
+        "width": 6,
+        "height": 13
+      },
+      "confidence": 0.8,
+      "message": "D35: Actual image contains an additional region."
+    },
+    {
+      "id": "D36",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 306,
+        "y": 77,
+        "width": 9,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 306,
+        "y": 78,
+        "width": 9,
+        "height": 10
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D36: Region resized from 9x11 to 9x10."
+    },
+    {
+      "id": "D37",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 335,
+        "y": 77,
+        "width": 11,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D37: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D38",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 347,
+        "y": 77,
+        "width": 13,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 347,
+        "y": 78,
+        "width": 13,
+        "height": 10
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5113173309762276,
+      "message": "D38: Region resized from 13x11 to 13x10."
+    },
+    {
+      "id": "D39",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 370,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D39: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D40",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 390,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 335,
+        "y": 77,
+        "width": 9,
+        "height": 11
+      },
+      "offset": {
+        "x": -55,
+        "y": 0
+      },
+      "confidence": 0.5,
+      "message": "D40: Region resized from 8x11 to 9x11."
+    },
+    {
+      "id": "D41",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 390,
+        "y": 77,
+        "width": 7,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D41: Actual image contains an additional region."
+    },
+    {
+      "id": "D42",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 412,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D42: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D43",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 421,
+        "y": 77,
+        "width": 9,
+        "height": 15
+      },
+      "confidence": 0.8,
+      "message": "D43: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D44",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 431,
+        "y": 77,
+        "width": 19,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 421,
+        "y": 77,
+        "width": 29,
+        "height": 15
+      },
+      "confidence": 0.6551724137931034,
+      "message": "D44: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D45",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 450,
+        "y": 77,
+        "width": 9,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D45: Actual image contains an additional region."
+    },
+    {
+      "id": "D46",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 451,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D46: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D47",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 460,
+        "y": 77,
+        "width": 3,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 460,
+        "y": 78,
+        "width": 3,
+        "height": 10
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5384593256941574,
+      "message": "D47: Region resized from 3x11 to 3x10."
+    },
+    {
+      "id": "D48",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 464,
+        "y": 77,
+        "width": 9,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 464,
+        "y": 77,
+        "width": 9,
+        "height": 11
+      },
+      "confidence": 0.95,
+      "message": "D48: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D49",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 474,
+        "y": 77,
+        "width": 9,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 474,
+        "y": 77,
+        "width": 9,
+        "height": 15
+      },
+      "confidence": 0.95,
+      "message": "D49: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D50",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 488,
+        "y": 77,
+        "width": 13,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 488,
+        "y": 77,
+        "width": 13,
+        "height": 11
+      },
+      "confidence": 0.95,
+      "message": "D50: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D51",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 502,
+        "y": 77,
+        "width": 2,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D51: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D52",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 526,
+        "y": 77,
+        "width": 18,
+        "height": 15
+      },
+      "actual_bounds": {
+        "x": 525,
+        "y": 77,
+        "width": 19,
+        "height": 15
+      },
+      "offset": {
+        "x": -1,
+        "y": 0
+      },
+      "confidence": 0.5,
+      "message": "D52: Region resized from 18x15 to 19x15."
+    },
+    {
+      "id": "D53",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 545,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 545,
+        "y": 77,
+        "width": 8,
+        "height": 11
+      },
+      "confidence": 0.95,
+      "message": "D53: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D54",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 554,
+        "y": 77,
+        "width": 6,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 554,
+        "y": 77,
+        "width": 6,
+        "height": 11
+      },
+      "confidence": 0.95,
+      "message": "D54: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D55",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 585,
+        "y": 77,
+        "width": 7,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 585,
+        "y": 77,
+        "width": 7,
+        "height": 11
+      },
+      "confidence": 0.95,
+      "message": "D55: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D56",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 593,
+        "y": 77,
+        "width": 3,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 593,
+        "y": 78,
+        "width": 3,
+        "height": 10
+      },
+      "offset": {
+        "x": 0,
+        "y": 1
+      },
+      "confidence": 0.5,
+      "message": "D56: Region resized from 3x11 to 3x10."
+    },
+    {
+      "id": "D57",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 597,
+        "y": 77,
+        "width": 18,
+        "height": 11
+      },
+      "actual_bounds": {
+        "x": 597,
+        "y": 77,
+        "width": 34,
+        "height": 11
+      },
+      "confidence": 0.5294117647058824,
+      "message": "D57: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D58",
+      "kind": "removed",
+      "expected_bounds": {
+        "x": 616,
+        "y": 77,
+        "width": 15,
+        "height": 11
+      },
+      "confidence": 0.8,
+      "message": "D58: Expected region is missing from the actual image."
+    },
+    {
+      "id": "D59",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 501,
+        "y": 78,
+        "width": 4,
+        "height": 10
+      },
+      "confidence": 0.8,
+      "message": "D59: Actual image contains an additional region."
+    },
+    {
+      "id": "D60",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 560,
+        "y": 80,
+        "width": 4,
+        "height": 6
+      },
+      "confidence": 0.8,
+      "message": "D60: Actual image contains an additional region."
+    },
+    {
+      "id": "D61",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 291,
+        "y": 125,
+        "width": 360,
+        "height": 279
+      },
+      "actual_bounds": {
+        "x": 291,
+        "y": 125,
+        "width": 360,
+        "height": 279
+      },
+      "confidence": 0.95,
+      "message": "D61: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D62",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 672,
+        "y": 125,
+        "width": 360,
+        "height": 279
+      },
+      "actual_bounds": {
+        "x": 671,
+        "y": 187,
+        "width": 360,
+        "height": 277
+      },
+      "offset": {
+        "x": -1,
+        "y": 62
+      },
+      "confidence": 0.7168719635354696,
+      "message": "D62: Region resized from 360x279 to 360x277."
+    },
+    {
+      "id": "D63",
+      "kind": "resized",
+      "expected_bounds": {
+        "x": 1053,
+        "y": 125,
+        "width": 361,
+        "height": 279
+      },
+      "actual_bounds": {
+        "x": 1053,
+        "y": 125,
+        "width": 360,
+        "height": 278
+      },
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "confidence": 0.8128193871752134,
+      "message": "D63: Region resized from 361x279 to 360x278."
+    },
+    {
+      "id": "D64",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 261,
+        "y": 180,
+        "width": 1,
+        "height": 117
+      },
+      "confidence": 0.8,
+      "message": "D64: Actual image contains an additional region."
+    },
+    {
+      "id": "D65",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 261,
+        "y": 189,
+        "width": 1,
+        "height": 175
+      },
+      "actual_bounds": {
+        "x": 261,
+        "y": 143,
+        "width": 1,
+        "height": 34
+      },
+      "confidence": 0.5,
+      "message": "D65: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D66",
+      "kind": "added",
+      "actual_bounds": {
+        "x": 261,
+        "y": 305,
+        "width": 1,
+        "height": 17
+      },
+      "confidence": 0.8,
+      "message": "D66: Actual image contains an additional region."
+    },
+    {
+      "id": "D67",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 291,
+        "y": 431,
+        "width": 712,
+        "height": 600
+      },
+      "actual_bounds": {
+        "x": 291,
+        "y": 474,
+        "width": 712,
+        "height": 600
+      },
+      "confidence": 0.8662519440124417,
+      "message": "D67: Corresponding region has changed appearance."
+    },
+    {
+      "id": "D68",
+      "kind": "changed",
+      "expected_bounds": {
+        "x": 1024,
+        "y": 431,
+        "width": 389,
+        "height": 599
+      },
+      "actual_bounds": {
+        "x": 1024,
+        "y": 474,
+        "width": 389,
+        "height": 599
+      },
+      "confidence": 0.8660436137071651,
+      "message": "D68: Corresponding region has changed appearance."
+    }
+  ],
+  "artifacts": {
+    "expected": "examples/realistic-ui/output/expected.png",
+    "actual": "examples/realistic-ui/output/actual.png",
+    "diff": "examples/realistic-ui/output/diff.png"
+  }
+}
