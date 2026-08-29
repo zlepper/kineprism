@@ -26,5 +26,5 @@ pub use error::{CompareError, RenderError};
 pub use render::render_artifacts;
 pub use report::{
     Alignment, Bounds, CompareOptions, Comparison, ComparisonSummary, Difference, DifferenceKind,
-    ImageDimensions, MetricSet, Offset, RenderedArtifacts, SimilarityMetrics,
+    ImageDimensions, MetricSet, Offset, RenderedArtifacts, SimilarityMetrics, SuppressionSummary,
 };

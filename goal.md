@@ -129,7 +129,7 @@ pub fn render_artifacts(
 ) -> Result<RenderedArtifacts, RenderError>;
 ```
 
-The public supporting types include `CompareOptions`, `Comparison`, `ComparisonSummary`, `Alignment`, `Difference`, `DifferenceKind`, `Bounds`, `Offset`, `SimilarityMetrics`, `MetricSet`, `RenderedArtifacts`, `CompareError`, and `RenderError`.
+The public supporting types include `CompareOptions`, `Comparison`, `ComparisonSummary`, `SuppressionSummary`, `Alignment`, `Difference`, `DifferenceKind`, `Bounds`, `Offset`, `SimilarityMetrics`, `MetricSet`, `RenderedArtifacts`, `CompareError`, and `RenderError`.
 
 - `Comparison` contains dimensions, settings, alignment, metrics, sorted differences, summary counts, and equivalence state. It contains no filesystem paths.
 - `RenderedArtifacts` contains three in-memory `RgbaImage` buffers named `expected`, `actual`, and `diff`.
@@ -297,6 +297,10 @@ The top-level report has this conceptual shape:
     "removed": 0,
     "changed": 0,
     "canvas_size": 0
+  },
+  "suppression": {
+    "movement_border_regions": 0,
+    "movement_border_pixels": 0
   },
   "differences": [],
   "artifacts": {
@@ -474,6 +478,19 @@ Background likeness should be estimated from nearby border colors and low edge d
 
 After classification, remove insignificant components again and coalesce immediately adjacent residual components only when they have the same class and compatible evidence.
 
+Defer low-value residual components bordering validated local movements so agents can address the
+larger structural cause first:
+
+- Apply this only to residual `changed` components after primary structural classification.
+- Require the residual bounds to fit wholly within the border halo of exactly one movement.
+- Scale the halo as `ceil(sqrt(movement_area) / 128)`, clamped to 1–8 pixels.
+- Scale the maximum suppressed connected area as `movement_area / 512`, clamped to 16–1024 pixels.
+- Never suppress primary `moved`, `resized`, `added`, or `removed` findings, large residuals,
+  out-of-halo residuals, or residuals ambiguous between movements.
+- Return a structured suppression summary containing region and pixel counts plus guidance to
+  compare again after correcting the movements. Suppression affects finding priority and
+  annotations, not similarity metrics.
+
 ### Stage 8: Calculate similarity metrics
 
 - Calculate `raw` metrics directly from the same-coordinate overlap.
@@ -572,6 +589,8 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 21. A globally shifted layout improves global-aligned metrics relative to raw metrics.
 22. A locally shifted box improves structural-aligned metrics relative to global-aligned metrics without removing the movement finding.
 23. Added, removed, and resized regions remain reflected in coverage or error instead of being silently corrected by structural metrics.
+24. Small residual fringes around a large movement are summarized as suppressed, while larger,
+    distant, and movement-ambiguous residuals remain visible.
 
 ### Core API integration tests
 
@@ -580,6 +599,7 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 - Invalid library options or excessive dimensions return typed errors rather than panicking.
 - The core comparison and rendering results contain no caller paths or other CLI-only state.
 - Serialization of public core report types is stable and embeds correctly in the CLI JSON envelope.
+- Movement-border suppression counts and guidance are available through the public comparison result.
 
 ### CLI integration tests
 
@@ -616,6 +636,7 @@ The README must include:
 - A JSON example with the offset-direction convention.
 - Definitions, ranges, comparison scopes, and interpretation guidance for MAE, RMSE, PSNR, SSIM, changed-pixel ratio, and coverage.
 - A description of `report.json`, the three output images, and annotation colors.
+- The exact scale-aware movement-border suppression rule and the distinction between prioritization and equivalence.
 - Explanation of perceptual tolerance and minimum-region filtering.
 - Clear limitations: PNG only, same scale, bounded translation, conservative heuristics, and no UI semantics.
 - Guidance that consumers should trust explicit movement findings and inspect generic `changed` regions when confidence is insufficient.

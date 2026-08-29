@@ -84,6 +84,9 @@ fn identical_pngs_emit_json_and_four_artifacts() {
     assert_eq!(report["settings"]["max_offset"], 128);
     assert_eq!(report["settings"]["color_threshold"], 2.3);
     assert_eq!(report["settings"]["min_region_area"], 16);
+    assert_eq!(report["suppression"]["movement_border_regions"], 0);
+    assert_eq!(report["suppression"]["movement_border_pixels"], 0);
+    assert!(report["suppression"].get("message").is_none());
     assert_eq!(
         fs::read(output_directory.join("report.json")).expect("read JSON report"),
         output.stdout

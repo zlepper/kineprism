@@ -34,4 +34,6 @@ cargo run --release -p better-image-diff -- \
 ```
 
 Exit code `1` is expected because the images intentionally differ. The generated `report.json` and
-annotated PNGs are written to the ignored `output/` directory.
+annotated PNGs are written to the ignored `output/` directory. The expected primary result is three
+movement findings; the tiny shadow fringes at their borders are counted in the report's structured
+suppression note rather than emitted as independent red `changed` findings.

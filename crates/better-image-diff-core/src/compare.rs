@@ -111,6 +111,7 @@ pub fn compare(
         },
         equivalent,
         summary,
+        suppression: analysis.suppression,
         differences,
     })
 }
@@ -149,6 +150,7 @@ fn empty_analysis(alignment: crate::Alignment) -> classify::StructuralAnalysis {
         alignment,
         differences: Vec::new(),
         movements: Vec::new(),
+        suppression: crate::SuppressionSummary::default(),
     }
 }
 

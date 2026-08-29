@@ -2,6 +2,7 @@ use std::path::Path;
 
 use better_image_diff_core::{
     Alignment, CompareOptions, Comparison, ComparisonSummary, Difference, SimilarityMetrics,
+    SuppressionSummary,
 };
 use serde::Serialize;
 
@@ -17,6 +18,7 @@ pub(crate) struct CliReport<'a> {
     alignment: &'a Alignment,
     metrics: &'a SimilarityMetrics,
     summary: &'a ComparisonSummary,
+    suppression: &'a SuppressionSummary,
     differences: &'a [Difference],
     artifacts: ReportArtifacts<'a>,
 }
@@ -59,6 +61,7 @@ impl<'a> CliReport<'a> {
             alignment: &comparison.alignment,
             metrics: &comparison.metrics,
             summary: &comparison.summary,
+            suppression: &comparison.suppression,
             differences: &comparison.differences,
             artifacts: ReportArtifacts {
                 expected: &artifact_paths.expected,

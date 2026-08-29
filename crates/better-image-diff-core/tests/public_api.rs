@@ -28,6 +28,9 @@ fn identical_in_memory_images_can_be_compared_and_rendered() {
     let comparison = compare(&image, &image, &CompareOptions::default()).expect("compare");
     assert!(comparison.equivalent);
     assert!(comparison.differences.is_empty());
+    assert_eq!(comparison.suppression.movement_border_regions, 0);
+    assert_eq!(comparison.suppression.movement_border_pixels, 0);
+    assert!(comparison.suppression.message.is_none());
 
     let rendered = render_artifacts(&image, &image, &comparison).expect("render");
     assert_eq!(rendered.expected.dimensions(), (4, 3));

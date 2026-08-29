@@ -198,6 +198,42 @@ pub struct ComparisonSummary {
     pub canvas_size: u32,
 }
 
+/// Residual differences intentionally deferred so primary structural findings remain prominent.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SuppressionSummary {
+    /// Small residual regions suppressed because they border exactly one validated movement.
+    pub movement_border_regions: u32,
+    /// Connected changed pixels contained by those suppressed regions.
+    pub movement_border_pixels: u64,
+    /// Human- and agent-readable guidance when any residuals were suppressed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl SuppressionSummary {
+    pub(crate) fn record_movement_border(&mut self, pixels: u32) {
+        self.movement_border_regions = self.movement_border_regions.saturating_add(1);
+        self.movement_border_pixels = self
+            .movement_border_pixels
+            .saturating_add(u64::from(pixels));
+        self.message = Some(format!(
+            "Suppressed {} small residual {} ({} px) bordering validated movements. Recheck {} after correcting the reported movements.",
+            self.movement_border_regions,
+            if self.movement_border_regions == 1 {
+                "region"
+            } else {
+                "regions"
+            },
+            self.movement_border_pixels,
+            if self.movement_border_regions == 1 {
+                "it"
+            } else {
+                "them"
+            }
+        ));
+    }
+}
+
 /// Complete path-independent result of a comparison.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Comparison {
@@ -213,6 +249,8 @@ pub struct Comparison {
     pub metrics: SimilarityMetrics,
     /// Counts derived from differences.
     pub summary: ComparisonSummary,
+    /// Pixel-level residuals deferred in favor of more valuable structural findings.
+    pub suppression: SuppressionSummary,
     /// Sorted structural differences.
     pub differences: Vec<Difference>,
     /// Whether no meaningful differences remain.

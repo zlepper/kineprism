@@ -10,12 +10,16 @@ use crate::matching::{
 use crate::movement;
 use crate::proposals::{self, Proposal};
 use crate::residual;
-use crate::{Alignment, Bounds, CompareError, CompareOptions, Difference, DifferenceKind, Offset};
+use crate::{
+    Alignment, Bounds, CompareError, CompareOptions, Difference, DifferenceKind, Offset,
+    SuppressionSummary,
+};
 
 pub(crate) struct StructuralAnalysis {
     pub(crate) alignment: Alignment,
     pub(crate) differences: Vec<Difference>,
     pub(crate) movements: Vec<MovementMapping>,
+    pub(crate) suppression: SuppressionSummary,
 }
 
 #[derive(Default)]
@@ -125,13 +129,16 @@ pub(crate) fn analyze(
     movement::coalesce(&mut output.differences, &mut output.movements)?;
     append_unpaired_differences(&pairs, &expected_proposals, &actual_proposals, &mut output);
 
-    residual::append_unhandled(
-        expected,
-        actual,
-        alignment.offset,
-        options,
-        &output.handled_expected,
-        &output.handled_actual,
+    let suppression = residual::append_unhandled(
+        residual::AnalysisContext {
+            expected,
+            actual,
+            alignment: alignment.offset,
+            options,
+            handled_expected: &output.handled_expected,
+            handled_actual: &output.handled_actual,
+            movements: &output.movements,
+        },
         &mut output.differences,
     )?;
 
@@ -139,6 +146,7 @@ pub(crate) fn analyze(
         alignment,
         differences: output.differences,
         movements: output.movements,
+        suppression,
     })
 }
 

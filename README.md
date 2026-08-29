@@ -92,6 +92,10 @@ An abbreviated movement looks like this:
     "changed": 0,
     "canvas_size": 0
   },
+  "suppression": {
+    "movement_border_regions": 0,
+    "movement_border_pixels": 0
+  },
   "differences": [
     {
       "id": "D1",
@@ -113,6 +117,24 @@ findings ordered top-to-bottom and left-to-right.
 Consumers should act on explicit, high-confidence `moved` findings directly. A generic `changed`
 finding means the visual difference is real but a narrower geometric explanation was not
 trustworthy; inspect its bounds and diagnostic mask rather than guessing semantics.
+
+### Movement-border suppression
+
+Large translated regions can leave tiny antialiased edges or shadows just outside the matched
+bounds. Reporting those as independent `changed` findings distracts from the movement that should
+be fixed first. After movements are finalized, the engine may defer a small residual component
+that lies entirely within the border halo of exactly one movement.
+
+The allowance scales conservatively with movement area. The halo radius is
+`ceil(sqrt(area) / 128)`, clamped to 1–8 pixels. The maximum suppressed connected area is
+`area / 512`, clamped to 16–1024 pixels. Larger residuals, residuals outside the halo, and residuals
+near multiple movements remain ordinary findings. Primary `moved`, `resized`, `added`, and
+`removed` findings are never suppressed.
+
+Suppression is prioritization, not equivalence. The report records `movement_border_regions`,
+`movement_border_pixels`, and a note recommending another comparison after the movements are
+fixed. Suppressed residuals receive no finding IDs or red annotations, while similarity metrics
+continue to measure the underlying pixels.
 
 ## Similarity metrics
 

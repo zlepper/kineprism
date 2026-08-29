@@ -1,16 +1,35 @@
 use crate::color::NormalizedImage;
-use crate::mask::Mask;
-use crate::{Bounds, CompareError, CompareOptions, Difference, DifferenceKind, Offset};
+use crate::local_geometry::padded;
+use crate::mapping::MovementMapping;
+use crate::mask::{Component, Mask};
+use crate::{
+    Bounds, CompareError, CompareOptions, Difference, DifferenceKind, Offset, SuppressionSummary,
+};
+
+#[derive(Clone, Copy)]
+pub(crate) struct AnalysisContext<'a> {
+    pub(crate) expected: &'a NormalizedImage,
+    pub(crate) actual: &'a NormalizedImage,
+    pub(crate) alignment: Offset,
+    pub(crate) options: &'a CompareOptions,
+    pub(crate) handled_expected: &'a [Bounds],
+    pub(crate) handled_actual: &'a [Bounds],
+    pub(crate) movements: &'a [MovementMapping],
+}
 
 pub(crate) fn append_unhandled(
-    expected: &NormalizedImage,
-    actual: &NormalizedImage,
-    alignment: Offset,
-    options: &CompareOptions,
-    handled_expected: &[Bounds],
-    handled_actual: &[Bounds],
+    context: AnalysisContext<'_>,
     differences: &mut Vec<Difference>,
-) -> Result<(), CompareError> {
+) -> Result<SuppressionSummary, CompareError> {
+    let AnalysisContext {
+        expected,
+        actual,
+        alignment,
+        options,
+        handled_expected,
+        handled_actual,
+        movements,
+    } = context;
     let mut expected_mask = aligned_mask(expected, actual, alignment, options)?;
     let reverse = Offset {
         x: alignment.x.saturating_neg(),
@@ -24,6 +43,7 @@ pub(crate) fn append_unhandled(
     let expected_components = expected_mask.components(options.min_region_area)?;
     let actual_components = actual_mask.components(options.min_region_area)?;
     let mut actual_used = vec![false; actual_components.len()];
+    let mut suppression = SuppressionSummary::default();
 
     for component in expected_components {
         let actual_bounds = translated_clipped(component.bounds, alignment, actual);
@@ -34,6 +54,10 @@ pub(crate) fn append_unhandled(
                 }
             }
         }
+        if movement_border_suppression(&component, true, movements, alignment, expected, actual) {
+            suppression.record_movement_border(component.area);
+            continue;
+        }
         differences.push(changed_component(
             Some(component.bounds),
             actual_bounds,
@@ -42,6 +66,12 @@ pub(crate) fn append_unhandled(
     }
     for (index, component) in actual_components.into_iter().enumerate() {
         if !actual_used[index] {
+            if movement_border_suppression(
+                &component, false, movements, alignment, expected, actual,
+            ) {
+                suppression.record_movement_border(component.area);
+                continue;
+            }
             differences.push(changed_component(
                 translated_clipped(component.bounds, reverse, expected),
                 Some(component.bounds),
@@ -65,7 +95,105 @@ pub(crate) fn append_unhandled(
         false,
         differences,
     );
-    Ok(())
+    Ok(suppression)
+}
+
+fn movement_border_suppression(
+    component: &Component,
+    component_is_expected: bool,
+    movements: &[MovementMapping],
+    alignment: Offset,
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+) -> bool {
+    let mut matched = None;
+    for (index, movement) in movements.iter().enumerate() {
+        if !component_borders_movement(
+            component.bounds,
+            component_is_expected,
+            *movement,
+            alignment,
+            expected,
+            actual,
+        ) {
+            continue;
+        }
+        if matched.is_some() {
+            return false;
+        }
+        matched = Some(index);
+    }
+    matched.is_some_and(|index| component.area <= suppression_area(movements[index].bounds))
+}
+
+fn component_borders_movement(
+    component: Bounds,
+    component_is_expected: bool,
+    movement: MovementMapping,
+    alignment: Offset,
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+) -> bool {
+    let radius = suppression_radius(movement.bounds);
+    let actual_bounds =
+        movement
+            .bounds
+            .translated_clipped(movement.offset, actual.width(), actual.height());
+    let reverse_alignment = Offset {
+        x: alignment.x.saturating_neg(),
+        y: alignment.y.saturating_neg(),
+    };
+    if component_is_expected {
+        borders(
+            component,
+            movement.bounds,
+            radius,
+            expected.width(),
+            expected.height(),
+        ) || actual_bounds
+            .and_then(|bounds| {
+                bounds.translated_clipped(reverse_alignment, expected.width(), expected.height())
+            })
+            .is_some_and(|bounds| {
+                borders(
+                    component,
+                    bounds,
+                    radius,
+                    expected.width(),
+                    expected.height(),
+                )
+            })
+    } else {
+        actual_bounds.is_some_and(|bounds| {
+            borders(component, bounds, radius, actual.width(), actual.height())
+        }) || movement
+            .bounds
+            .translated_clipped(alignment, actual.width(), actual.height())
+            .is_some_and(|bounds| {
+                borders(component, bounds, radius, actual.width(), actual.height())
+            })
+    }
+}
+
+fn borders(component: Bounds, movement: Bounds, radius: u32, width: u32, height: u32) -> bool {
+    movement.intersection(component).is_none()
+        && contains(padded(movement, radius, width, height), component)
+}
+
+fn contains(outer: Bounds, inner: Bounds) -> bool {
+    inner.x >= outer.x
+        && inner.y >= outer.y
+        && inner.right() <= outer.right()
+        && inner.bottom() <= outer.bottom()
+}
+
+fn suppression_radius(bounds: Bounds) -> u32 {
+    let root = bounds.area().isqrt();
+    u32::try_from(root.div_ceil(128).clamp(1, 8)).unwrap_or(8)
+}
+
+fn suppression_area(bounds: Bounds) -> u32 {
+    u32::try_from((bounds.area() / 512).clamp(16, 1024)).unwrap_or(1024)
 }
 
 pub(crate) fn significant_pair(
@@ -234,5 +362,218 @@ fn changed_component(
         offset: None,
         confidence: 0.7,
         message: format!("A {area} px region contains otherwise unexplained visual differences."),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use image::{Rgba, RgbaImage};
+
+    use super::*;
+    use crate::color::NormalizedImage;
+
+    fn movement(bounds: Bounds, offset: Offset) -> MovementMapping {
+        MovementMapping {
+            bounds,
+            offset,
+            confidence: 1.0,
+            order: 0,
+        }
+    }
+
+    fn fill(image: &mut RgbaImage, bounds: Bounds, color: Rgba<u8>) {
+        for y in bounds.y..bounds.bottom() {
+            for x in bounds.x..bounds.right() {
+                image.put_pixel(x, y, color);
+            }
+        }
+    }
+
+    #[test]
+    fn suppression_limits_scale_with_movement_area() {
+        let small = Bounds {
+            x: 0,
+            y: 0,
+            width: 64,
+            height: 64,
+        };
+        let large = Bounds {
+            x: 0,
+            y: 0,
+            width: 1024,
+            height: 512,
+        };
+
+        assert_eq!(suppression_radius(small), 1);
+        assert_eq!(suppression_area(small), 16);
+        assert_eq!(suppression_radius(large), 6);
+        assert_eq!(suppression_area(large), 1024);
+    }
+
+    #[test]
+    fn suppression_requires_one_unambiguous_bordering_movement_and_a_small_component() {
+        let expected_pixels = RgbaImage::from_pixel(900, 400, Rgba([250, 250, 250, 255]));
+        let actual_pixels = expected_pixels.clone();
+        let expected = NormalizedImage::try_new(&expected_pixels).expect("expected image");
+        let actual = NormalizedImage::try_new(&actual_pixels).expect("actual image");
+        let primary = movement(
+            Bounds {
+                x: 20,
+                y: 20,
+                width: 256,
+                height: 128,
+            },
+            Offset { x: 300, y: 0 },
+        );
+        let fringe = Component {
+            bounds: Bounds {
+                x: 18,
+                y: 40,
+                width: 1,
+                height: 20,
+            },
+            area: 20,
+        };
+
+        assert!(movement_border_suppression(
+            &fringe,
+            true,
+            &[primary],
+            Offset::default(),
+            &expected,
+            &actual,
+        ));
+
+        let too_large = Component {
+            area: 65,
+            ..fringe.clone()
+        };
+        assert!(!movement_border_suppression(
+            &too_large,
+            true,
+            &[primary],
+            Offset::default(),
+            &expected,
+            &actual,
+        ));
+
+        let outside_halo = Component {
+            bounds: Bounds {
+                x: 17,
+                ..fringe.bounds
+            },
+            ..fringe.clone()
+        };
+        assert!(!movement_border_suppression(
+            &outside_halo,
+            true,
+            &[primary],
+            Offset::default(),
+            &expected,
+            &actual,
+        ));
+
+        let adjacent = movement(
+            Bounds {
+                x: 15,
+                y: 20,
+                width: 3,
+                height: 128,
+            },
+            Offset { x: 300, y: 0 },
+        );
+        assert!(!movement_border_suppression(
+            &fringe,
+            true,
+            &[primary, adjacent],
+            Offset::default(),
+            &expected,
+            &actual,
+        ));
+    }
+
+    #[test]
+    fn residual_analysis_defers_border_fringes_but_keeps_distant_changes() {
+        let background = Rgba([250, 250, 250, 255]);
+        let content = Rgba([40, 80, 140, 255]);
+        let shadow = Rgba([225, 225, 228, 255]);
+        let changed = Rgba([220, 40, 40, 255]);
+        let mut expected_pixels = RgbaImage::from_pixel(620, 220, background);
+        let mut actual_pixels = expected_pixels.clone();
+        let expected_bounds = Bounds {
+            x: 40,
+            y: 40,
+            width: 256,
+            height: 128,
+        };
+        let actual_bounds = Bounds {
+            x: 340,
+            ..expected_bounds
+        };
+        fill(&mut expected_pixels, expected_bounds, content);
+        fill(&mut actual_pixels, actual_bounds, content);
+        fill(
+            &mut expected_pixels,
+            Bounds {
+                x: 38,
+                y: 70,
+                width: 1,
+                height: 20,
+            },
+            shadow,
+        );
+        fill(
+            &mut actual_pixels,
+            Bounds {
+                x: 338,
+                y: 70,
+                width: 1,
+                height: 20,
+            },
+            shadow,
+        );
+        fill(
+            &mut actual_pixels,
+            Bounds {
+                x: 610,
+                y: 190,
+                width: 4,
+                height: 5,
+            },
+            changed,
+        );
+        let expected = NormalizedImage::try_new(&expected_pixels).expect("expected image");
+        let actual = NormalizedImage::try_new(&actual_pixels).expect("actual image");
+        let movement = movement(expected_bounds, Offset { x: 300, y: 0 });
+        let mut differences = Vec::new();
+
+        let options = CompareOptions::default();
+        let suppression = append_unhandled(
+            AnalysisContext {
+                expected: &expected,
+                actual: &actual,
+                alignment: Offset::default(),
+                options: &options,
+                handled_expected: &[expected_bounds],
+                handled_actual: &[actual_bounds],
+                movements: &[movement],
+            },
+            &mut differences,
+        )
+        .expect("residual analysis");
+
+        assert_eq!(suppression.movement_border_regions, 2);
+        assert_eq!(suppression.movement_border_pixels, 40);
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert_eq!(differences[0].kind, DifferenceKind::Changed);
+        assert_eq!(
+            differences[0].actual_bounds,
+            Some(Bounds {
+                x: 610,
+                y: 190,
+                width: 4,
+                height: 5,
+            })
+        );
     }
 }
