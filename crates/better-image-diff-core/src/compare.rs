@@ -28,10 +28,10 @@ pub fn compare(
 
     let expected_dimensions = dimensions(expected);
     let actual_dimensions = dimensions(actual);
-    let normalized_expected = NormalizedImage::try_new(expected)?;
-    let normalized_actual = NormalizedImage::try_new(actual)?;
-    let expected_pyramid = ImagePyramid::try_new(&normalized_expected)?;
-    let actual_pyramid = ImagePyramid::try_new(&normalized_actual)?;
+    let (expected_preparation, actual_preparation) =
+        rayon::join(|| prepare_image(expected), || prepare_image(actual));
+    let (normalized_expected, expected_pyramid) = expected_preparation?;
+    let (normalized_actual, actual_pyramid) = actual_preparation?;
     let raw_mapping =
         PixelMapping::translated(&normalized_expected, &normalized_actual, Offset::default())?;
     let raw_metrics = metrics::calculate(
@@ -114,6 +114,12 @@ pub fn compare(
         suppression: analysis.suppression,
         differences,
     })
+}
+
+fn prepare_image(image: &RgbaImage) -> Result<(NormalizedImage, ImagePyramid), CompareError> {
+    let normalized = NormalizedImage::try_new(image)?;
+    let pyramid = ImagePyramid::try_new(&normalized)?;
+    Ok((normalized, pyramid))
 }
 
 fn calculate_aligned_metrics(
