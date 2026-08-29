@@ -304,8 +304,8 @@ the dashed cyan boundary, two visible movements, and the omission of the right-s
 ## Development
 
 The supported Rust version is 1.98 or newer. `rust-toolchain.toml` pins this workspace to 1.98.0
-with the `rustfmt` and `clippy` components, so Rustup-backed Cargo commands select the correct
-toolchain automatically. The final validation matrix is:
+with the `rustfmt` and `clippy` components plus the x86-64 musl target, so Rustup-backed Cargo
+commands select the correct toolchain automatically. The final validation matrix is:
 
 ```console
 cargo fmt --all -- --check
@@ -346,3 +346,33 @@ example, a single-thread benchmark can be used as a scaling reference:
 ```console
 RAYON_NUM_THREADS=1 cargo bench -p better-image-diff-core --bench comparison
 ```
+
+#### glibc versus musl
+
+On x86-64 Linux, the same benchmark suite can compare a Nix-provided dynamically linked glibc build
+with a statically linked musl build:
+
+```console
+bash scripts/bench-libc.sh
+```
+
+The pinned Rust toolchain includes the `x86_64-unknown-linux-musl` standard library. Criterion also
+uses a small native `alloca` helper, so this temporary comparison script uses `nix-shell` to provide
+GCC for the glibc pass and GCC plus `musl-gcc` for the musl pass. It requires Nix with access to
+Nixpkgs; neither compiler is added as a permanent system dependency.
+
+The script records glibc as Criterion's `glibc` baseline and then reports musl's statistically
+measured change against it. Results and the combined HTML report are written under
+`target/criterion-libc/`; normal `target/criterion/` results remain untouched.
+
+Both runs inherit the same Rayon configuration. Set an explicit thread count when comparing
+machines or isolating allocator and runtime behavior:
+
+```console
+RAYON_NUM_THREADS=1 bash scripts/bench-libc.sh
+```
+
+This is an end-to-end runtime comparison, not a microbenchmark of libc calls. In particular, it
+also captures allocator behavior and the difference between dynamic glibc linkage and static musl
+linkage. Criterion runs glibc first, so repeat the comparison when a small result could be explained
+by thermal or background-system noise.

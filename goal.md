@@ -78,7 +78,7 @@ better-image-diff/
             └── cli.rs
 ```
 
-The library package and crate are named `better-image-diff-core` and `better_image_diff_core`. The CLI package and executable are named `better-image-diff`. The workspace root is virtual and uses resolver version 2. A `rust-toolchain.toml` file pins Rust 1.98.0 with the minimal profile plus the `rustfmt` and `clippy` components, so Rustup-backed Cargo commands automatically select the supported toolchain.
+The library package and crate are named `better-image-diff-core` and `better_image_diff_core`. The CLI package and executable are named `better-image-diff`. The workspace root is virtual and uses resolver version 2. A `rust-toolchain.toml` file pins Rust 1.98.0 with the minimal profile, the `rustfmt` and `clippy` components, and the x86-64 musl target, so Rustup-backed Cargo commands automatically select the supported toolchain.
 
 All image-analysis, matching, classification, metric calculation, report-domain types, and annotation rendering belong to the core crate. The CLI crate is limited to:
 
@@ -634,6 +634,7 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 - Use Rayon only for profiled independent work: paired image preparation, alignment-candidate scoring, and raw SSIM alongside alignment and classification. Keep score reduction, finding generation, connected components, and report assembly sequential so thread count cannot affect results.
 - Do not include timestamps, random identifiers, absolute canonical paths, or nondeterministic map iteration in JSON or artifacts.
 - Add a release-mode smoke benchmark or ignored timing test using a generated 1920x1080 UI screenshot and the default 128 px search radius. It should guard against obviously quadratic full-resolution search behavior without imposing a machine-specific hard timing assertion in the normal test suite.
+- On x86-64 Linux, provide a script that runs the same Criterion scenarios against explicit `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` targets. Save glibc as the statistical baseline and report musl relative to it without mixing the results with the default Criterion output.
 
 ## 14. Documentation
 
