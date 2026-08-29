@@ -1,5 +1,5 @@
-use better_image_diff_core::{CompareOptions, compare};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{CompareOptions, compare};
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     assert!(

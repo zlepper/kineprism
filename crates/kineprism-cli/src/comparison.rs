@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use better_image_diff_core::{CompareOptions, compare, render_artifacts};
+use kineprism_core::{CompareOptions, compare, render_artifacts};
 
 use crate::artifacts::ArtifactPaths;
 use crate::error::CliError;

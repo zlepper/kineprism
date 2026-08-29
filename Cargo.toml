@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/better-image-diff-cli",
-    "crates/better-image-diff-core",
+    "crates/kineprism-cli",
+    "crates/kineprism-core",
 ]
 resolver = "2"
 

@@ -8,15 +8,15 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use better_image_diff_core::{Bounds, CompareOptions};
 use clap::{Args as ClapArgs, Parser, Subcommand};
+use kineprism_core::{Bounds, CompareOptions};
 
 use comparison::ComparisonRequest;
 use error::CliError;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "better-image-diff",
+    name = "kineprism",
     version,
     about = "Structurally compare two UI screenshots"
 )]

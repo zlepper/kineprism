@@ -7,7 +7,7 @@ workspace_dir="$(cd -- "${script_dir}/../.." && pwd)"
 cd "${workspace_dir}"
 
 set +e
-cargo run --release -p better-image-diff -- \
+cargo run --release -p kineprism -- \
     examples/deterministic-ui/expected.png \
     examples/deterministic-ui/actual.png \
     --output-dir examples/bounded-region/output \

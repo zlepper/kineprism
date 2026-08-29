@@ -1,6 +1,6 @@
-# better-image-diff
+# Kineprism
 
-`better-image-diff` compares UI screenshots and reports meaningful visual changes. Rather than
+`kineprism` compares UI screenshots and reports meaningful visual changes. Rather than
 only highlighting changed pixels, it identifies high-confidence moved, resized, added, and removed
 regions where possible.
 
@@ -11,13 +11,13 @@ It runs locally and deterministically, with no network connection or external se
 Install from this checkout:
 
 ```console
-cargo install --path crates/better-image-diff-cli
+cargo install --path crates/kineprism-cli
 ```
 
 ## Usage
 
 ```console
-better-image-diff expected.png actual.png --output-dir comparison-output
+kineprism expected.png actual.png --output-dir comparison-output
 ```
 
 `expected.png` is the reference image and `actual.png` is the image being checked. Both inputs
@@ -26,7 +26,7 @@ must be PNG files.
 ### Options
 
 ```text
-better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
+kineprism <EXPECTED> <ACTUAL> --output-dir <PATH>
     [--max-offset <PIXELS>]
     [--color-threshold <DELTA>]
     [--min-region-area <PIXELS>]
@@ -49,7 +49,7 @@ better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
 Run a local stdio [Model Context Protocol](https://modelcontextprotocol.io/) server with:
 
 ```console
-better-image-diff mcp
+kineprism mcp
 ```
 
 ## Results

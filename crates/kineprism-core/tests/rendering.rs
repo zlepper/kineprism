@@ -1,5 +1,5 @@
-use better_image_diff_core::{CompareOptions, DifferenceKind, compare, render_artifacts};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{CompareOptions, DifferenceKind, compare, render_artifacts};
 
 fn fill_rect(image: &mut RgbaImage, x: u32, y: u32, width: u32, height: u32, color: Rgba<u8>) {
     for pixel_y in y..y + height {
@@ -139,7 +139,7 @@ fn renderer_clips_mutated_public_bounds_to_the_image() {
         .differences
         .first_mut()
         .expect("changed difference");
-    let unbounded = better_image_diff_core::Bounds {
+    let unbounded = kineprism_core::Bounds {
         x: 0,
         y: 0,
         width: u32::MAX,
@@ -179,7 +179,7 @@ fn differing_canvas_boundaries_are_visible_on_the_maximum_canvas() {
 fn masked_comparisons_mark_the_full_size_artifacts_with_a_dashed_cyan_boundary() {
     let expected = RgbaImage::from_pixel(20, 16, Rgba([30, 40, 50, 255]));
     let actual = expected.clone();
-    let region = better_image_diff_core::Bounds {
+    let region = kineprism_core::Bounds {
         x: 3,
         y: 4,
         width: 10,

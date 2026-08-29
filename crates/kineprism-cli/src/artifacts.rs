@@ -3,8 +3,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use better_image_diff_core::RenderedArtifacts;
 use image::{ExtendedColorType, ImageFormat};
+use kineprism_core::RenderedArtifacts;
 
 use crate::error::CliError;
 
@@ -135,8 +135,7 @@ fn reserve_transaction_directory(
 ) -> io::Result<PathBuf> {
     const MAX_ATTEMPTS: usize = 128;
     for _ in 0..MAX_ATTEMPTS {
-        let candidate =
-            output_directory.join(format!(".better-image-diff.{process}.{}", next_sequence()));
+        let candidate = output_directory.join(format!(".kineprism.{process}.{}", next_sequence()));
         match fs::create_dir(&candidate) {
             Ok(()) => return Ok(candidate),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
@@ -270,13 +269,13 @@ mod tests {
     #[test]
     fn transaction_reservation_preserves_colliding_directory() {
         let root = std::env::temp_dir().join(format!(
-            "better-image-diff-reservation-{}-{}",
+            "kineprism-reservation-{}-{}",
             std::process::id(),
             NEXT_TRANSACTION.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root).expect("create test root");
         let process = 42;
-        let collision = root.join(format!(".better-image-diff.{process}.7"));
+        let collision = root.join(format!(".kineprism.{process}.7"));
         fs::create_dir(&collision).expect("create collision");
         let sentinel = collision.join("sentinel");
         fs::write(&sentinel, b"unrelated").expect("write sentinel");
@@ -289,7 +288,7 @@ mod tests {
         })
         .expect("reserve after collision");
 
-        assert_eq!(reserved, root.join(".better-image-diff.42.8"));
+        assert_eq!(reserved, root.join(".kineprism.42.8"));
         assert_eq!(fs::read(&sentinel).expect("read sentinel"), b"unrelated");
         fs::remove_dir(reserved).expect("remove reservation");
         fs::remove_file(sentinel).expect("remove sentinel");

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use better_image_diff_core::{
+use kineprism_core::{
     Alignment, CompareOptions, Comparison, ComparisonSummary, Difference, SimilarityMetrics,
     SuppressionSummary,
 };

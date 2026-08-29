@@ -1,7 +1,7 @@
-use better_image_diff_core::{
+use image::{Rgba, RgbaImage};
+use kineprism_core::{
     CompareError, CompareOptions, DifferenceKind, Offset, RenderError, compare, render_artifacts,
 };
-use image::{Rgba, RgbaImage};
 
 #[test]
 fn default_options_match_the_cli_contract() {

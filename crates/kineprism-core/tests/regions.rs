@@ -1,7 +1,7 @@
-use better_image_diff_core::{
+use image::{Rgba, RgbaImage};
+use kineprism_core::{
     Bounds, CompareError, CompareOptions, DifferenceKind, ImageDimensions, Offset, compare,
 };
-use image::{Rgba, RgbaImage};
 
 const WHITE: Rgba<u8> = Rgba([255, 255, 255, 255]);
 const DARK: Rgba<u8> = Rgba([25, 35, 50, 255]);

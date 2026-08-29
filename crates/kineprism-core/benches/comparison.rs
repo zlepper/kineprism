@@ -1,9 +1,9 @@
 use std::hint::black_box;
 use std::time::Duration;
 
-use better_image_diff_core::{Bounds, CompareOptions, Comparison, DifferenceKind, Offset, compare};
 use criterion::{BenchmarkId, Criterion, Throughput};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{Bounds, CompareOptions, Comparison, DifferenceKind, Offset, compare};
 
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;

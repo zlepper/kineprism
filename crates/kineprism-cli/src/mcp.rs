@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use better_image_diff_core::{Bounds, CompareOptions};
+use kineprism_core::{Bounds, CompareOptions};
 use rmcp::{
     RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
@@ -109,7 +109,7 @@ impl ImageDiffServer {
 #[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(
     router = self.tool_router,
-    name = "better-image-diff",
+    name = "kineprism",
     instructions = "Use compare_ui_images to compare PNG screenshots of user interfaces. All paths must be absolute and under an MCP workspace root."
 )]
 impl ServerHandler for ImageDiffServer {}

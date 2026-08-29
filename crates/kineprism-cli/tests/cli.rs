@@ -28,10 +28,8 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let sequence = NEXT_TEMP_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "better-image-diff-test-{}-{sequence}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("kineprism-test-{}-{sequence}", std::process::id()));
         fs::create_dir(&path).expect("create test directory");
         Self(path)
     }
@@ -48,7 +46,7 @@ impl Drop for TestDirectory {
 }
 
 fn command() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_better-image-diff"))
+    Command::new(env!("CARGO_BIN_EXE_kineprism"))
 }
 
 struct McpTestClient {
@@ -59,7 +57,7 @@ impl ClientHandler for McpTestClient {
     fn get_info(&self) -> ClientInfo {
         ClientInfo::new(
             ClientCapabilities::builder().enable_roots().build(),
-            Implementation::new("better-image-diff-test", "1"),
+            Implementation::new("kineprism-test", "1"),
         )
     }
 
@@ -75,11 +73,9 @@ async fn mcp_client(
     root: &Path,
 ) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
     let transport = TokioChildProcess::new(
-        tokio::process::Command::new(env!("CARGO_BIN_EXE_better-image-diff")).configure(
-            |command| {
-                command.arg("mcp");
-            },
-        ),
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_kineprism")).configure(|command| {
+            command.arg("mcp");
+        }),
     )?;
     let client = McpTestClient {
         root_uri: file_uri(root),
@@ -480,7 +476,7 @@ fn realistic_comparison_is_identical_across_rayon_thread_counts() {
         .to_rgba8();
     let expected = image::imageops::crop_imm(&expected_fixture, 640, 90, 430, 410).to_image();
     let actual = image::imageops::crop_imm(&actual_fixture, 640, 90, 430, 410).to_image();
-    let options = better_image_diff_core::CompareOptions::default();
+    let options = kineprism_core::CompareOptions::default();
     let serial_pool = ThreadPoolBuilder::new()
         .num_threads(1)
         .build()
@@ -492,10 +488,10 @@ fn realistic_comparison_is_identical_across_rayon_thread_counts() {
 
     for (name, comparison_actual) in [("identical", &expected), ("changed", &actual)] {
         let serial = serial_pool
-            .install(|| better_image_diff_core::compare(&expected, comparison_actual, &options))
+            .install(|| kineprism_core::compare(&expected, comparison_actual, &options))
             .unwrap_or_else(|error| panic!("serial {name} comparison: {error}"));
         let parallel = parallel_pool
-            .install(|| better_image_diff_core::compare(&expected, comparison_actual, &options))
+            .install(|| kineprism_core::compare(&expected, comparison_actual, &options))
             .unwrap_or_else(|error| panic!("parallel {name} comparison: {error}"));
 
         assert_eq!(

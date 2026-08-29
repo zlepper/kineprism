@@ -1,5 +1,5 @@
-use better_image_diff_core::{CompareOptions, DifferenceKind, Offset, compare};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{CompareOptions, DifferenceKind, Offset, compare};
 
 const BACKGROUND: Rgba<u8> = Rgba([242, 244, 248, 255]);
 

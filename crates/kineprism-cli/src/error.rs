@@ -3,7 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use std::io;
 use std::path::PathBuf;
 
-use better_image_diff_core::{CompareError, RenderError};
+use kineprism_core::{CompareError, RenderError};
 
 #[derive(Debug)]
 pub(crate) enum CliError {

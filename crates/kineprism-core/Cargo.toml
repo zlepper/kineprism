@@ -1,5 +1,5 @@
 [package]
-name = "better-image-diff-core"
+name = "kineprism-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

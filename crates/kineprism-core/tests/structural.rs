@@ -1,5 +1,5 @@
-use better_image_diff_core::{CompareOptions, DifferenceKind, Offset, compare};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{CompareOptions, DifferenceKind, Offset, compare};
 
 const BACKGROUND: Rgba<u8> = Rgba([242, 244, 248, 255]);
 
@@ -36,9 +36,9 @@ fn draw_card(image: &mut RgbaImage, x: u32, y: u32, width: u32, height: u32, fil
 }
 
 fn findings_of_kind(
-    comparison: &better_image_diff_core::Comparison,
+    comparison: &kineprism_core::Comparison,
     kind: DifferenceKind,
-) -> Vec<&better_image_diff_core::Difference> {
+) -> Vec<&kineprism_core::Difference> {
     comparison
         .differences
         .iter()

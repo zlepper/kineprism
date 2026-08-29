@@ -25,7 +25,7 @@ glibc_command=(
     env
     "CRITERION_HOME=${criterion_dir}"
     cargo bench
-    -p better-image-diff-core
+    -p kineprism-core
     --bench comparison
     --target "${glibc_target}"
     --
@@ -39,7 +39,7 @@ musl_command=(
     "CRITERION_HOME=${criterion_dir}"
     CC_x86_64_unknown_linux_musl=musl-gcc
     cargo bench
-    -p better-image-diff-core
+    -p kineprism-core
     --bench comparison
     --target "${musl_target}"
     --

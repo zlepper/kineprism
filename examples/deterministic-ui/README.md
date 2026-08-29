@@ -4,7 +4,7 @@ This example moves three dashboard panels without scaling: the New Customers car
 down, and the Revenue Over Time and Recent Activity panels each move 43 pixels down.
 
 ```console
-better-image-diff examples/deterministic-ui/expected.png \
+kineprism examples/deterministic-ui/expected.png \
   examples/deterministic-ui/actual.png \
   --output-dir examples/deterministic-ui/output --force
 ```

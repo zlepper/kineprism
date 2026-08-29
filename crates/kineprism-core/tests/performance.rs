@@ -1,5 +1,5 @@
-use better_image_diff_core::{CompareOptions, compare};
 use image::{Rgba, RgbaImage};
+use kineprism_core::{CompareOptions, compare};
 
 fn fill_rect(image: &mut RgbaImage, x: u32, y: u32, width: u32, height: u32, color: Rgba<u8>) {
     for pixel_y in y..y + height {
