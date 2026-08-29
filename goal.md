@@ -149,6 +149,8 @@ better-image-diff <EXPECTED.png> <ACTUAL.png> --output-dir <PATH>
     [--max-offset <PIXELS>]
     [--color-threshold <DELTA>]
     [--min-region-area <PIXELS>]
+    [--region-x <PIXELS> --region-y <PIXELS>
+     --region-width <PIXELS> --region-height <PIXELS>]
     [--force]
 ```
 
@@ -165,6 +167,7 @@ The argument names and all messages must consistently preserve this direction. A
 - `--max-offset <PIXELS>` defaults to `128`. It must be a non-negative integer. It controls both global and local translation searches.
 - `--color-threshold <DELTA>` defaults to `2.3`. It must be finite and non-negative. It controls the perceptual pixel-distance threshold.
 - `--min-region-area <PIXELS>` defaults to `16`. It must be a positive integer and represents the minimum significant connected-region area.
+- The four `--region-* <PIXELS>` options are all-or-none and select one non-empty rectangle that must fit completely inside both inputs. Only that area affects comparison, while reports and artifacts retain full-image dimensions and coordinates.
 - `--force` permits replacement of the four known artifact files. It must not delete or modify unrelated files in the output directory.
 - Standard `--help` and `--version` behavior comes from `clap`.
 
@@ -226,6 +229,7 @@ On `diff.png`:
 - Label findings with their stable ID. Movement labels also show signed `dx` and `dy` values.
 - Indicate both source canvas boundaries when their dimensions differ.
 - Draw meaningful residual changed pixels or a translucent mask inside residual bounds so the image conveys shape rather than boxes alone.
+- When a comparison region is active, draw its boundary on all three full-size artifacts as an opaque two-pixel cyan (`0, 180, 210`) outline using a four-pixel-on/four-pixel-off dash pattern. Draw findings afterward and leave `diff.png` white outside the region.
 
 Implement the small set of required lines, rectangles, arrowheads, dashed strokes, alpha blending, and labels directly. Embed a compact bitmap font supporting the ASCII characters needed for finding IDs and signed integer offsets instead of adding a drawing or font dependency.
 
@@ -357,8 +361,8 @@ The core library computes and reports three metric sets so consumers can disting
 Every set is a `MetricSet` containing:
 
 - `compared_pixels`: number of pixel pairs included in the metric calculation.
-- `expected_coverage`: compared expected pixels divided by the full expected pixel count.
-- `actual_coverage`: compared actual pixels divided by the full actual pixel count.
+- `expected_coverage`: compared expected pixels divided by the active comparison area, meaning the selected region when configured and the full expected canvas otherwise.
+- `actual_coverage`: compared actual pixels divided by the active comparison area, meaning the selected region when configured and the full actual canvas otherwise.
 - `mae`: mean absolute error over normalized visible RGBA channels, in `[0, 1]`; lower is better.
 - `rmse`: root mean squared error over the same channels, in `[0, 1]`; lower is better.
 - `psnr_db`: peak signal-to-noise ratio in decibels using a normalized peak value of `1`; higher is better. Serialize this as `null` when MSE is zero because the mathematical value is positive infinity and JSON has no infinity value.
@@ -592,6 +596,10 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 23. Added, removed, and resized regions remain reflected in coverage or error instead of being silently corrected by structural metrics.
 24. Small residual fringes around a large movement are summarized as suppressed, while larger,
     distant, and movement-ambiguous residuals remain visible.
+25. A shared comparison region ignores changes and canvas-size differences outside it, retains
+    full-screen finding coordinates, and uses the selected area for metric coverage.
+26. Zero-sized, partially specified, and out-of-bounds comparison regions fail with exit `2` or a
+    typed core error, while a region touching the bottom-right edge is valid.
 
 ### Core API integration tests
 
@@ -601,6 +609,7 @@ Generate simple UI-like fixtures using rectangles, borders, text-like stripe pat
 - The core comparison and rendering results contain no caller paths or other CLI-only state.
 - Serialization of public core report types is stable and embeds correctly in the CLI JSON envelope.
 - Movement-border suppression counts and guidance are available through the public comparison result.
+- `CompareOptions::region` restricts all metric and finding scopes while preserving original input dimensions and global finding coordinates.
 
 ### CLI integration tests
 

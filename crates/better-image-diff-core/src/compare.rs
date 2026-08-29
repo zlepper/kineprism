@@ -6,8 +6,8 @@ use crate::mapping::{MovementMapping, PixelMapping};
 use crate::metrics;
 use crate::pyramid::ImagePyramid;
 use crate::{
-    CompareError, CompareOptions, Comparison, ComparisonSummary, Difference, DifferenceKind,
-    ImageDimensions, MetricSet, Offset, SimilarityMetrics,
+    Bounds, CompareError, CompareOptions, Comparison, ComparisonSummary, Difference,
+    DifferenceKind, ImageDimensions, MetricSet, Offset, SimilarityMetrics,
 };
 
 const MAX_ESTIMATED_WORKING_BYTES: u64 = 1_610_612_736;
@@ -24,8 +24,48 @@ pub fn compare(
     actual: &RgbaImage,
     options: &CompareOptions,
 ) -> Result<Comparison, CompareError> {
-    validate_inputs(expected, actual, options)?;
+    options.validate()?;
+    validate_area(expected)?;
+    validate_area(actual)?;
 
+    let expected_dimensions = dimensions(expected);
+    let actual_dimensions = dimensions(actual);
+    let Some(region) = options.region else {
+        validate_working_set_dimensions(
+            expected.width(),
+            expected.height(),
+            actual.width(),
+            actual.height(),
+        )?;
+        return compare_images(expected, actual, options);
+    };
+    validate_region(region, expected_dimensions, actual_dimensions)?;
+    validate_working_set_dimensions(region.width, region.height, region.width, region.height)?;
+    let (expected_region, actual_region) = rayon::join(
+        || extract_region(expected, region),
+        || extract_region(actual, region),
+    );
+    let expected_region = expected_region?;
+    let actual_region = actual_region?;
+    let mut comparison = compare_images(&expected_region, &actual_region, options)?;
+    comparison.expected = expected_dimensions;
+    comparison.actual = actual_dimensions;
+    for difference in &mut comparison.differences {
+        difference.expected_bounds = difference
+            .expected_bounds
+            .map(|bounds| rebase_bounds(bounds, region));
+        difference.actual_bounds = difference
+            .actual_bounds
+            .map(|bounds| rebase_bounds(bounds, region));
+    }
+    Ok(comparison)
+}
+
+fn compare_images(
+    expected: &RgbaImage,
+    actual: &RgbaImage,
+    options: &CompareOptions,
+) -> Result<Comparison, CompareError> {
     let expected_dimensions = dimensions(expected);
     let actual_dimensions = dimensions(actual);
     let (expected_preparation, actual_preparation) =
@@ -123,6 +163,70 @@ pub fn compare(
     })
 }
 
+fn validate_region(
+    region: Bounds,
+    expected: ImageDimensions,
+    actual: ImageDimensions,
+) -> Result<(), CompareError> {
+    let fits = |dimensions: ImageDimensions| {
+        region
+            .x
+            .checked_add(region.width)
+            .is_some_and(|right| right <= dimensions.width)
+            && region
+                .y
+                .checked_add(region.height)
+                .is_some_and(|bottom| bottom <= dimensions.height)
+    };
+    if !fits(expected) || !fits(actual) {
+        return Err(CompareError::RegionOutOfBounds {
+            region,
+            expected,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn extract_region(image: &RgbaImage, region: Bounds) -> Result<RgbaImage, CompareError> {
+    let byte_count = region
+        .area()
+        .checked_mul(4)
+        .and_then(|bytes| usize::try_from(bytes).ok())
+        .ok_or(CompareError::ImageTooLarge)?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(byte_count)
+        .map_err(|_error| CompareError::ImageTooLarge)?;
+    let source_width = u64::from(image.width());
+    let row_bytes = usize::try_from(u64::from(region.width) * 4)
+        .map_err(|_error| CompareError::ImageTooLarge)?;
+    for y in region.y..region.bottom() {
+        let start =
+            usize::try_from((u64::from(y) * source_width + u64::from(region.x)).saturating_mul(4))
+                .map_err(|_error| CompareError::ImageTooLarge)?;
+        let end = start
+            .checked_add(row_bytes)
+            .ok_or(CompareError::ImageTooLarge)?;
+        bytes.extend_from_slice(
+            image
+                .as_raw()
+                .get(start..end)
+                .ok_or(CompareError::ImageTooLarge)?,
+        );
+    }
+    RgbaImage::from_raw(region.width, region.height, bytes).ok_or(CompareError::ImageTooLarge)
+}
+
+fn rebase_bounds(bounds: Bounds, region: Bounds) -> Bounds {
+    Bounds {
+        x: region.x.saturating_add(bounds.x),
+        y: region.y.saturating_add(bounds.y),
+        width: bounds.width,
+        height: bounds.height,
+    }
+}
+
 fn prepare_image(image: &RgbaImage) -> Result<(NormalizedImage, ImagePyramid), CompareError> {
     let normalized = NormalizedImage::try_new(image)?;
     let pyramid = ImagePyramid::try_new(&normalized)?;
@@ -165,22 +269,6 @@ fn empty_analysis(alignment: crate::Alignment) -> classify::StructuralAnalysis {
         movements: Vec::new(),
         suppression: crate::SuppressionSummary::default(),
     }
-}
-
-fn validate_inputs(
-    expected: &RgbaImage,
-    actual: &RgbaImage,
-    options: &CompareOptions,
-) -> Result<(), CompareError> {
-    options.validate()?;
-    validate_area(expected)?;
-    validate_area(actual)?;
-    validate_working_set_dimensions(
-        expected.width(),
-        expected.height(),
-        actual.width(),
-        actual.height(),
-    )
 }
 
 fn validate_area(image: &RgbaImage) -> Result<(), CompareError> {

@@ -12,6 +12,9 @@ pub struct CompareOptions {
     pub color_threshold: f64,
     /// Smallest connected region that may become a reported difference.
     pub min_region_area: u32,
+    /// Optional full-image rectangle restricting every comparison scope.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<Bounds>,
 }
 
 impl Default for CompareOptions {
@@ -20,6 +23,7 @@ impl Default for CompareOptions {
             max_offset: 128,
             color_threshold: 2.3,
             min_region_area: 16,
+            region: None,
         }
     }
 }
@@ -41,6 +45,11 @@ impl CompareOptions {
         }
         if self.min_region_area == 0 {
             return Err(crate::CompareError::InvalidMinimumRegionArea(0));
+        }
+        if let Some(region) = self.region
+            && (region.width == 0 || region.height == 0)
+        {
+            return Err(crate::CompareError::InvalidRegionSize(region));
         }
         Ok(())
     }

@@ -1,6 +1,8 @@
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+use crate::{Bounds, ImageDimensions};
+
 /// An invalid comparison request.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompareError {
@@ -10,6 +12,17 @@ pub enum CompareError {
     InvalidColorThreshold(f64),
     /// Regions must contain at least one pixel.
     InvalidMinimumRegionArea(u32),
+    /// A selected comparison region must have nonzero width and height.
+    InvalidRegionSize(Bounds),
+    /// A selected comparison region must fit completely inside both images.
+    RegionOutOfBounds {
+        /// Requested full-image comparison region.
+        region: Bounds,
+        /// Expected image dimensions.
+        expected: ImageDimensions,
+        /// Actual image dimensions.
+        actual: ImageDimensions,
+    },
     /// An image dimension or area cannot be represented safely.
     ImageTooLarge,
 }
@@ -32,6 +45,27 @@ impl Display for CompareError {
                     "minimum region area must be positive, got {value}"
                 )
             }
+            Self::InvalidRegionSize(region) => write!(
+                formatter,
+                "comparison region must have positive width and height, got {}x{} at ({}, {})",
+                region.width, region.height, region.x, region.y
+            ),
+            Self::RegionOutOfBounds {
+                region,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "comparison region {}x{} at ({}, {}) must fit inside expected {}x{} and actual {}x{}",
+                region.width,
+                region.height,
+                region.x,
+                region.y,
+                expected.width,
+                expected.height,
+                actual.width,
+                actual.height
+            ),
             Self::ImageTooLarge => formatter.write_str("image dimensions are too large"),
         }
     }

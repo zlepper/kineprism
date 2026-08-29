@@ -10,6 +10,7 @@ fn default_options_match_the_cli_contract() {
     assert_eq!(options.max_offset, 128);
     assert!((options.color_threshold - 2.3).abs() < f64::EPSILON);
     assert_eq!(options.min_region_area, 16);
+    assert_eq!(options.region, None);
 }
 
 #[test]

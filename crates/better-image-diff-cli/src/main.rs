@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use better_image_diff_core::{CompareOptions, compare, render_artifacts};
+use better_image_diff_core::{Bounds, CompareOptions, compare, render_artifacts};
 use clap::Parser;
 use image::{ImageFormat, ImageReader, RgbaImage};
 
@@ -37,6 +37,21 @@ struct Args {
     /// Smallest significant connected region.
     #[arg(long, default_value_t = CompareOptions::default().min_region_area)]
     min_region_area: u32,
+    /// Left edge of the optional comparison region.
+    #[arg(
+        long,
+        requires_all = ["region_y", "region_width", "region_height"]
+    )]
+    region_x: Option<u32>,
+    /// Top edge of the optional comparison region.
+    #[arg(long, requires = "region_x")]
+    region_y: Option<u32>,
+    /// Width of the optional comparison region.
+    #[arg(long, requires = "region_x")]
+    region_width: Option<u32>,
+    /// Height of the optional comparison region.
+    #[arg(long, requires = "region_x")]
+    region_height: Option<u32>,
     /// Replace the four known artifacts if they exist.
     #[arg(long)]
     force: bool,
@@ -63,6 +78,7 @@ fn run(arguments: &Args) -> Result<bool, CliError> {
         max_offset: arguments.max_offset,
         color_threshold: arguments.color_threshold,
         min_region_area: arguments.min_region_area,
+        region: comparison_region(arguments),
     };
     options.validate()?;
 
@@ -84,6 +100,21 @@ fn run(arguments: &Args) -> Result<bool, CliError> {
     artifact_paths.write(&rendered, &json, arguments.force)?;
     io::stdout().write_all(&json)?;
     Ok(comparison.equivalent)
+}
+
+fn comparison_region(arguments: &Args) -> Option<Bounds> {
+    arguments.region_x.map(|x| Bounds {
+        x,
+        y: arguments
+            .region_y
+            .expect("Clap requires region y when region x is present"),
+        width: arguments
+            .region_width
+            .expect("Clap requires region width when region x is present"),
+        height: arguments
+            .region_height
+            .expect("Clap requires region height when region x is present"),
+    })
 }
 
 fn load_png(path: &Path) -> Result<RgbaImage, CliError> {

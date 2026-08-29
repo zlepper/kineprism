@@ -41,6 +41,8 @@ better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
     [--max-offset <PIXELS>]
     [--color-threshold <DELTA>]
     [--min-region-area <PIXELS>]
+    [--region-x <PIXELS> --region-y <PIXELS>
+     --region-width <PIXELS> --region-height <PIXELS>]
     [--force]
 ```
 
@@ -52,6 +54,9 @@ Options:
 - `--color-threshold` defaults to `2.3`. Pixels at or below this perceptual distance are treated
   as equivalent.
 - `--min-region-area` defaults to `16`. Smaller connected residual regions are ignored.
+- The four `--region-*` options restrict comparison to one non-empty rectangle that must fit
+  inside both images. They are all-or-none; findings retain full-screen coordinates, metrics use
+  the selected area as their coverage denominator, and differences elsewhere are ignored.
 - `--force` replaces only `report.json`, `expected.png`, `actual.png`, and `diff.png` in the output
   directory.
   Unrelated files are preserved.
@@ -188,6 +193,10 @@ Finding colors are blue for `moved`, purple for `resized`, green for `added`, or
 red for `changed`, and neutral gray for `canvas_size`. A stable ID and color connect the JSON record
 to all applicable images.
 
+When a comparison region is active, all three full-size artifacts show its boundary as a two-pixel
+dashed cyan line. The diagnostic canvas remains white outside the region, and finding annotations
+are drawn over the boundary. Source canvas-size differences outside the region are ignored.
+
 Without `--force`, any of the four existing artifact targets aborts the operation. With `--force`,
 prior artifacts are backed up inside an atomically reserved transaction directory and restored if
 the commit cannot complete. The CLI refuses to overwrite either input, including a path alias.
@@ -198,7 +207,7 @@ Add `better-image-diff-core` and an `image` version compatible with this workspa
 package. The core needs no PNG codec when callers already have `RgbaImage` values.
 
 ```rust
-use better_image_diff_core::{CompareOptions, compare, render_artifacts};
+use better_image_diff_core::{Bounds, CompareOptions, compare, render_artifacts};
 use image::{Rgba, RgbaImage};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -206,6 +215,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let actual = expected.clone();
     let options = CompareOptions {
         max_offset: 64,
+        region: Some(Bounds {
+            x: 40,
+            y: 30,
+            width: 240,
+            height: 140,
+        }),
         ..CompareOptions::default()
     };
 
@@ -227,6 +242,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 `compare` and `render_artifacts` operate entirely in memory. `Comparison` contains no filesystem
 paths or process state, while `RenderedArtifacts` returns three `RgbaImage` buffers for the caller
 to store or display as appropriate.
+
+`CompareOptions::region` applies one shared full-image rectangle to both inputs. The implementation
+analyzes only that area but reports original image dimensions and rebases every finding to the
+original coordinate system. The region must have positive dimensions and fit completely inside
+both images.
 
 ## Perceptual and structural behavior
 
@@ -298,9 +318,10 @@ cargo test --release -p better-image-diff-core --test performance -- --ignored
 ### Benchmarks
 
 Criterion benchmarks exercise `better_image_diff_core::compare` on deterministic 1920×1080
-application-like screenshots. They cover identical images, one card moved five pixels, and a
-dashboard with many moved and appearance-changed elements. PNG decoding and artifact rendering are
-excluded so the measurements isolate structural comparison.
+application-like screenshots. They cover identical images, one card moved five pixels, a dashboard
+with many moved and appearance-changed elements, and a 420×270 masked dialog with unrelated
+full-screen background changes. PNG decoding and artifact rendering are excluded so the
+measurements isolate structural comparison.
 
 ```console
 cargo bench -p better-image-diff-core --bench comparison

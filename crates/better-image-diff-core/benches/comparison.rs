@@ -1,7 +1,7 @@
 use std::hint::black_box;
 use std::time::Duration;
 
-use better_image_diff_core::{CompareOptions, Comparison, DifferenceKind, Offset, compare};
+use better_image_diff_core::{Bounds, CompareOptions, Comparison, DifferenceKind, Offset, compare};
 use criterion::{BenchmarkId, Criterion, Throughput};
 use image::{Rgba, RgbaImage};
 
@@ -324,6 +324,86 @@ fn compare_benchmarks(criterion: &mut Criterion) {
         );
     }
     group.finish();
+
+    masked_comparison_benchmark(criterion, &expected);
+}
+
+fn masked_comparison_benchmark(criterion: &mut Criterion, expected: &RgbaImage) {
+    let region = Bounds {
+        x: 650,
+        y: 100,
+        width: 420,
+        height: 270,
+    };
+    let masked_options = CompareOptions {
+        region: Some(region),
+        ..CompareOptions::default()
+    };
+    let mut masked_actual = expected.clone();
+    fill_rect(
+        &mut masked_actual,
+        Rectangle {
+            x: 760,
+            y: 250,
+            width: 80,
+            height: 30,
+        },
+        Rgba([190, 55, 75, 255]),
+    );
+    fill_rect(
+        &mut masked_actual,
+        Rectangle {
+            x: 0,
+            y: 0,
+            width: 238,
+            height: HEIGHT,
+        },
+        Rgba([80, 20, 100, 255]),
+    );
+    fill_rect(
+        &mut masked_actual,
+        Rectangle {
+            x: 1200,
+            y: 500,
+            width: 500,
+            height: 300,
+        },
+        Rgba([20, 90, 75, 255]),
+    );
+    let masked_result =
+        compare(expected, &masked_actual, &masked_options).expect("validate masked change");
+    assert!(!masked_result.equivalent);
+    assert!(masked_result.summary.total > 0);
+    assert!(masked_result.differences.iter().all(|difference| {
+        difference
+            .expected_bounds
+            .into_iter()
+            .chain(difference.actual_bounds)
+            .all(|bounds| {
+                bounds.x >= region.x
+                    && bounds.y >= region.y
+                    && bounds.right() <= region.right()
+                    && bounds.bottom() <= region.bottom()
+            })
+    }));
+    assert_eq!(masked_result.metrics.raw.compared_pixels, region.area());
+
+    let mut masked_group = criterion.benchmark_group("masked_compare_1920x1080_source");
+    masked_group.throughput(Throughput::Elements(region.area()));
+    masked_group.sample_size(10);
+    masked_group.warm_up_time(Duration::from_secs(1));
+    masked_group.measurement_time(Duration::from_secs(12));
+    masked_group.bench_function("dialog_content_change_420x270_region", |bencher| {
+        bencher.iter(|| {
+            compare(
+                black_box(expected),
+                black_box(&masked_actual),
+                black_box(&masked_options),
+            )
+            .expect("benchmark masked comparison")
+        });
+    });
+    masked_group.finish();
 }
 
 fn main() {

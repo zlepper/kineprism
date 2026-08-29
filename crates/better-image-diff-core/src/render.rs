@@ -12,6 +12,7 @@ const ADDED: Rgba<u8> = Rgba([35, 160, 85, 255]);
 const REMOVED: Rgba<u8> = Rgba([230, 135, 35, 255]);
 const CHANGED: Rgba<u8> = Rgba([220, 45, 55, 255]);
 const CANVAS: Rgba<u8> = Rgba([100, 105, 115, 255]);
+const REGION: Rgba<u8> = Rgba([0, 180, 210, 255]);
 
 /// Renders annotated source images and a white diagnostic canvas in memory.
 ///
@@ -36,7 +37,16 @@ pub fn render_artifacts(
     let mut actual_artifact = try_clone(actual)?;
     let mut diff = try_blank(width, height, Rgba([255, 255, 255, 255]))?;
 
-    if comparison.expected != comparison.actual {
+    if let Some(region) = comparison.settings.region {
+        rectangle(&mut expected_artifact, region, REGION, true);
+        rectangle(&mut actual_artifact, region, REGION, true);
+        rectangle(&mut diff, region, REGION, true);
+    }
+    if comparison
+        .differences
+        .iter()
+        .any(|difference| difference.kind == DifferenceKind::CanvasSize)
+    {
         draw_canvas_boundaries(&mut diff, expected, actual);
     }
     for difference in &comparison.differences {
@@ -58,12 +68,28 @@ pub fn render_artifacts(
             comparison.settings.color_threshold,
         );
     }
+    if let Some(region) = comparison.settings.region {
+        clear_outside_region(&mut diff, region);
+    }
 
     Ok(RenderedArtifacts {
         expected: expected_artifact,
         actual: actual_artifact,
         diff,
     })
+}
+
+fn clear_outside_region(image: &mut RgbaImage, region: Bounds) {
+    let right = region.right().min(image.width());
+    let bottom = region.bottom().min(image.height());
+    let white = Rgba([255, 255, 255, 255]);
+    for y in 0..image.height() {
+        for x in 0..image.width() {
+            if x < region.x || x >= right || y < region.y || y >= bottom {
+                image.put_pixel(x, y, white);
+            }
+        }
+    }
 }
 
 fn validate_inputs(

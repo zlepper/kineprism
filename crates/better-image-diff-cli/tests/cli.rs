@@ -48,6 +48,10 @@ fn help_describes_the_public_arguments() {
     assert!(stdout.contains("--max-offset"));
     assert!(stdout.contains("--color-threshold"));
     assert!(stdout.contains("--min-region-area"));
+    assert!(stdout.contains("--region-x"));
+    assert!(stdout.contains("--region-y"));
+    assert!(stdout.contains("--region-width"));
+    assert!(stdout.contains("--region-height"));
     assert!(stdout.contains("--force"));
 }
 
@@ -58,6 +62,118 @@ fn missing_arguments_use_the_documented_error_exit_code() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert!(!output.stderr.is_empty());
+}
+
+#[test]
+fn comparison_region_flags_are_all_or_none() {
+    let output = command()
+        .args([
+            "expected.png",
+            "actual.png",
+            "--output-dir",
+            "output",
+            "--region-x",
+            "4",
+        ])
+        .output()
+        .expect("run CLI");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--region-y"));
+}
+
+#[test]
+fn masked_cli_comparison_ignores_outside_changes_and_marks_full_size_artifacts() {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let output_directory = directory.path().join("output");
+    let expected = RgbaImage::from_pixel(30, 20, Rgba([245, 245, 245, 255]));
+    let mut actual = expected.clone();
+    for y in 1..5 {
+        for x in 2..8 {
+            actual.put_pixel(x, y, Rgba([20, 30, 40, 255]));
+        }
+    }
+    expected.save(&expected_path).expect("save expected");
+    actual.save(&actual_path).expect("save actual");
+
+    let output = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(&output_directory)
+        .args([
+            "--region-x",
+            "10",
+            "--region-y",
+            "6",
+            "--region-width",
+            "12",
+            "--region-height",
+            "10",
+        ])
+        .output()
+        .expect("run masked CLI comparison");
+
+    assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON report");
+    assert_eq!(
+        report["settings"]["region"],
+        serde_json::json!({ "x": 10, "y": 6, "width": 12, "height": 10 })
+    );
+    assert_eq!(report["metrics"]["raw"]["compared_pixels"], 120);
+    assert!(
+        report["differences"]
+            .as_array()
+            .expect("differences")
+            .is_empty()
+    );
+
+    for name in ["expected.png", "actual.png", "diff.png"] {
+        let artifact = image::open(output_directory.join(name))
+            .expect("open masked artifact")
+            .to_rgba8();
+        assert_eq!(artifact.dimensions(), (30, 20));
+        assert_eq!(*artifact.get_pixel(10, 6), Rgba([0, 180, 210, 255]));
+    }
+    let diff = image::open(output_directory.join("diff.png"))
+        .expect("open diff")
+        .to_rgba8();
+    assert_eq!(*diff.get_pixel(0, 0), Rgba([255, 255, 255, 255]));
+}
+
+#[test]
+fn an_out_of_bounds_cli_region_fails_without_artifacts() {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let output_directory = directory.path().join("output");
+    let image = RgbaImage::new(10, 10);
+    image.save(&expected_path).expect("save expected");
+    image.save(&actual_path).expect("save actual");
+
+    let output = command()
+        .args([expected_path.as_os_str(), actual_path.as_os_str()])
+        .arg("--output-dir")
+        .arg(&output_directory)
+        .args([
+            "--region-x",
+            "5",
+            "--region-y",
+            "5",
+            "--region-width",
+            "6",
+            "--region-height",
+            "5",
+        ])
+        .output()
+        .expect("run invalid masked comparison");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("must fit inside"));
+    assert!(!output_directory.join("report.json").exists());
 }
 
 #[test]
@@ -85,6 +201,7 @@ fn identical_pngs_emit_json_and_four_artifacts() {
     assert_eq!(report["settings"]["max_offset"], 128);
     assert_eq!(report["settings"]["color_threshold"], 2.3);
     assert_eq!(report["settings"]["min_region_area"], 16);
+    assert!(report["settings"].get("region").is_none());
     assert_eq!(report["suppression"]["movement_border_regions"], 0);
     assert_eq!(report["suppression"]["movement_border_pixels"], 0);
     assert!(report["suppression"].get("message").is_none());

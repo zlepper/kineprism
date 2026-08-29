@@ -174,3 +174,42 @@ fn differing_canvas_boundaries_are_visible_on_the_maximum_canvas() {
         "the canvas finding ID should be drawn inside the boundaries"
     );
 }
+
+#[test]
+fn masked_comparisons_mark_the_full_size_artifacts_with_a_dashed_cyan_boundary() {
+    let expected = RgbaImage::from_pixel(20, 16, Rgba([30, 40, 50, 255]));
+    let actual = expected.clone();
+    let region = better_image_diff_core::Bounds {
+        x: 3,
+        y: 4,
+        width: 10,
+        height: 8,
+    };
+    let options = CompareOptions {
+        region: Some(region),
+        ..CompareOptions::default()
+    };
+    let comparison = compare(&expected, &actual, &options).expect("compare region");
+
+    let rendered = render_artifacts(&expected, &actual, &comparison).expect("render region");
+    let cyan = Rgba([0, 180, 210, 255]);
+    let source = Rgba([30, 40, 50, 255]);
+
+    assert!(comparison.equivalent);
+    assert_eq!(rendered.expected.dimensions(), expected.dimensions());
+    assert_eq!(rendered.actual.dimensions(), actual.dimensions());
+    assert_eq!(rendered.diff.dimensions(), expected.dimensions());
+    for artifact in [&rendered.expected, &rendered.actual, &rendered.diff] {
+        assert_eq!(*artifact.get_pixel(region.x, region.y), cyan);
+        assert_eq!(*artifact.get_pixel(region.x, region.y + 1), cyan);
+    }
+    assert_eq!(*rendered.expected.get_pixel(region.x + 4, region.y), source);
+    assert_eq!(*rendered.actual.get_pixel(region.x + 4, region.y), source);
+    assert_eq!(
+        *rendered.diff.get_pixel(region.x + 4, region.y),
+        Rgba([255, 255, 255, 255])
+    );
+    assert_eq!(*rendered.expected.get_pixel(0, 0), source);
+    assert_eq!(*rendered.actual.get_pixel(0, 0), source);
+    assert_eq!(*rendered.diff.get_pixel(0, 0), Rgba([255, 255, 255, 255]));
+}
