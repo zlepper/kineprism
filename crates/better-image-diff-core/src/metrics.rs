@@ -17,11 +17,35 @@ pub(crate) fn calculate(
     mapping: &PixelMapping,
     color_threshold: f64,
 ) -> MetricSet {
+    let pending = calculate_pending(expected, actual, mapping, color_threshold);
+    let ssim = calculate_ssim(expected, actual, mapping);
+    pending.finish(ssim)
+}
+
+pub(crate) struct PendingMetrics(MetricSet);
+
+impl PendingMetrics {
+    pub(crate) fn changed_pixel_ratio(&self) -> Option<f64> {
+        self.0.changed_pixel_ratio
+    }
+
+    pub(crate) fn finish(mut self, ssim: Option<f64>) -> MetricSet {
+        self.0.ssim = ssim;
+        self.0
+    }
+}
+
+pub(crate) fn calculate_pending(
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+    mapping: &PixelMapping,
+    color_threshold: f64,
+) -> PendingMetrics {
     let compared_pixels = mapping.compared_pixels();
     let expected_area = u64::from(expected.width()) * u64::from(expected.height());
     let actual_area = u64::from(actual.width()) * u64::from(actual.height());
     if compared_pixels == 0 {
-        return MetricSet {
+        return PendingMetrics(MetricSet {
             compared_pixels,
             expected_coverage: coverage(compared_pixels, expected_area),
             actual_coverage: coverage(compared_pixels, actual_area),
@@ -30,7 +54,7 @@ pub(crate) fn calculate(
             psnr_db: None,
             ssim: None,
             changed_pixel_ratio: None,
-        };
+        });
     }
 
     let mut absolute_error = 0.0;
@@ -56,20 +80,20 @@ pub(crate) fn calculate(
     let rmse = mse.sqrt();
     let psnr_db = (mse > 0.0).then(|| 10.0 * (1.0 / mse).log10());
 
-    MetricSet {
+    PendingMetrics(MetricSet {
         compared_pixels,
         expected_coverage: coverage(compared_pixels, expected_area),
         actual_coverage: coverage(compared_pixels, actual_area),
         mae: Some(mae),
         rmse: Some(rmse),
         psnr_db,
-        ssim: calculate_ssim(expected, actual, mapping),
+        ssim: None,
         changed_pixel_ratio: Some(ratio(changed_pixels, compared_pixels)),
-    }
+    })
 }
 
 #[allow(clippy::cast_precision_loss)]
-fn calculate_ssim(
+pub(crate) fn calculate_ssim(
     expected: &NormalizedImage,
     actual: &NormalizedImage,
     mapping: &PixelMapping,

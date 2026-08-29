@@ -34,33 +34,40 @@ pub fn compare(
     let (normalized_actual, actual_pyramid) = actual_preparation?;
     let raw_mapping =
         PixelMapping::translated(&normalized_expected, &normalized_actual, Offset::default())?;
-    let raw_metrics = metrics::calculate(
+    let pending_raw_metrics = metrics::calculate_pending(
         &normalized_expected,
         &normalized_actual,
         &raw_mapping,
         options.color_threshold,
     );
-    let raw_pixels_match = raw_metrics
-        .changed_pixel_ratio
+    let raw_pixels_match = pending_raw_metrics
+        .changed_pixel_ratio()
         .is_some_and(|ratio| ratio <= f64::EPSILON);
-    let alignment = crate::alignment::estimate(
-        &expected_pyramid,
-        &actual_pyramid,
-        options.max_offset,
-        raw_pixels_match,
+    let (raw_ssim, analysis) = rayon::join(
+        || metrics::calculate_ssim(&normalized_expected, &normalized_actual, &raw_mapping),
+        || {
+            let alignment = crate::alignment::estimate(
+                &expected_pyramid,
+                &actual_pyramid,
+                options.max_offset,
+                raw_pixels_match,
+            );
+            if raw_pixels_match && expected_dimensions == actual_dimensions {
+                Ok(empty_analysis(alignment))
+            } else {
+                classify::analyze(
+                    expected,
+                    &normalized_expected,
+                    actual,
+                    &normalized_actual,
+                    options,
+                    alignment,
+                )
+            }
+        },
     );
-    let analysis = if raw_pixels_match && expected_dimensions == actual_dimensions {
-        empty_analysis(alignment)
-    } else {
-        classify::analyze(
-            expected,
-            &normalized_expected,
-            actual,
-            &normalized_actual,
-            options,
-            alignment,
-        )?
-    };
+    let raw_metrics = pending_raw_metrics.finish(raw_ssim);
+    let analysis = analysis?;
     let mut differences = Vec::new();
 
     if expected_dimensions != actual_dimensions {

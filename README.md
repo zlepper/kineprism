@@ -310,10 +310,11 @@ Criterion prints statistical timing estimates and throughput in pixels per secon
 detailed reports under `target/criterion/`. Each scenario validates its expected comparison result
 before measurement so an algorithm regression cannot silently produce a faster but invalid sample.
 
-The core comparison automatically uses Rayon's global thread pool for independent image preparation
-and alignment-candidate scoring. Library consumers can configure that pool before calling the core
-API, or set `RAYON_NUM_THREADS`; no comparison option or report field changes with the thread count.
-For example, a single-thread benchmark can be used as a scaling reference:
+The core comparison automatically uses Rayon's global thread pool for independent image
+preparation, alignment-candidate scoring, and overlapping raw SSIM with alignment and
+classification. Library consumers can configure that pool before calling the core API, or set
+`RAYON_NUM_THREADS`; no comparison option or report field changes with the thread count. For
+example, a single-thread benchmark can be used as a scaling reference:
 
 ```console
 RAYON_NUM_THREADS=1 cargo bench -p better-image-diff-core --bench comparison
