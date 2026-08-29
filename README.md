@@ -1,40 +1,29 @@
 # better-image-diff
 
-`better-image-diff` is a local, deterministic structural image comparison tool for UI
-screenshots. It is designed for coding agents and visual-regression workflows where a small
-layout mistake should be described as geometry, not as a wall of changed pixels.
+`better-image-diff` compares UI screenshots and reports meaningful visual changes. Rather than
+only highlighting changed pixels, it identifies high-confidence moved, resized, added, and removed
+regions where possible.
 
-If a complete card is rendered five pixels too far to the right, a literal pixel diff marks both
-the old and new card footprints. This tool instead tries to produce one `moved` finding with
-`{"x":5,"y":0}`, matching bounds, a confidence value, and an annotated arrow. When there is not
-enough evidence for a structural explanation, it deliberately falls back to `changed`.
+It runs locally and deterministically, with no network connection or external service required.
 
-The project is a Rust workspace with two packages:
+## Install
 
-- `better-image-diff-core` contains the path-independent comparison, metrics, report types, and
-  in-memory renderer for reuse by other Rust tools.
-- `better-image-diff` is a thin CLI for PNG decoding, argument handling, JSON output, and safe
-  artifact commits.
-
-It runs without a network connection, native computer-vision library, vision model, or external
-service.
-
-## Install and run
-
-Install the CLI from this checkout:
+Install from this checkout:
 
 ```console
 cargo install --path crates/better-image-diff-cli
 ```
 
-Or run it directly from the workspace:
+## Usage
 
 ```console
-cargo run --release -p better-image-diff -- \
-  expected.png actual.png --output-dir comparison-output
+better-image-diff expected.png actual.png --output-dir comparison-output
 ```
 
-The general form is:
+`expected.png` is the reference image and `actual.png` is the image being checked. Both inputs
+must be PNG files.
+
+### Options
 
 ```text
 better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
@@ -46,333 +35,44 @@ better-image-diff <EXPECTED> <ACTUAL> --output-dir <PATH>
     [--force]
 ```
 
-Options:
+- `--output-dir` is required and is created when needed.
+- `--max-offset` limits the translation search; the default is `128` pixels.
+- `--color-threshold` controls tolerance for small color differences; the default is `2.3`.
+- `--min-region-area` ignores smaller differences; the default is `16` pixels.
+- `--region-x`, `--region-y`, `--region-width`, and `--region-height` compare only the specified
+  rectangle. All four are required together.
+- `--force` replaces the tool's existing output files. Other files in the output directory are
+  preserved.
 
-- `--output-dir` is required. Missing parent directories are created.
-- `--max-offset` defaults to `128` pixels on each axis and bounds global and local translation
-  searches.
-- `--color-threshold` defaults to `2.3`. Pixels at or below this perceptual distance are treated
-  as equivalent.
-- `--min-region-area` defaults to `16`. Smaller connected residual regions are ignored.
-- The four `--region-*` options restrict comparison to one non-empty rectangle that must fit
-  inside both images. They are all-or-none; findings retain full-screen coordinates, metrics use
-  the selected area as their coverage denominator, and differences elsewhere are ignored.
-- `--force` replaces only `report.json`, `expected.png`, `actual.png`, and `diff.png` in the output
-  directory.
-  Unrelated files are preserved.
+## Results
 
-On a completed comparison, stdout is exactly one pretty-printed JSON document followed by a
-newline. Diagnostics and failures go to stderr.
+The command writes a JSON report to stdout and to `report.json` in the output directory. It also
+creates annotated copies of each input (`expected.png` and `actual.png`) plus `diff.png`, a visual
+summary of the findings.
+
+Each finding has a stable ID, type, bounds, and human-readable message. Moved regions also include
+their offset and confidence. When the tool cannot make a reliable structural classification, it
+reports the affected area as `changed`.
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | Comparison completed with no meaningful findings. |
-| `1` | Comparison completed with one or more meaningful findings. |
-| `2` | Arguments, inputs, processing, or artifact output failed. |
+| `0` | The images have no meaningful differences. |
+| `1` | One or more meaningful differences were found. |
+| `2` | The comparison could not be completed. |
 
-Exit code `1` is an expected visual-regression result, not a tool failure.
+Exit code `1` is an expected comparison result and can be used in visual-regression workflows.
 
-## JSON report
+## Examples
 
-The report is stable and agent-oriented. It contains source dimensions and paths, effective
-settings, global alignment, three metric scopes, deterministic findings and summary counts, and
-artifact paths. Fields that do not apply to a finding are omitted rather than set to `null`.
-
-An abbreviated movement looks like this:
-
-```json
-{
-  "schema_version": 1,
-  "equivalent": false,
-  "alignment": {
-    "offset": { "x": 0, "y": 0 },
-    "confidence": 1.0
-  },
-  "summary": {
-    "total": 1,
-    "moved": 1,
-    "resized": 0,
-    "added": 0,
-    "removed": 0,
-    "changed": 0,
-    "canvas_size": 0
-  },
-  "suppression": {
-    "movement_border_regions": 0,
-    "movement_border_pixels": 0
-  },
-  "differences": [
-    {
-      "id": "D1",
-      "kind": "moved",
-      "expected_bounds": { "x": 100, "y": 40, "width": 300, "height": 120 },
-      "actual_bounds": { "x": 105, "y": 40, "width": 300, "height": 120 },
-      "offset": { "x": 5, "y": 0 },
-      "confidence": 0.98,
-      "message": "D1: Region appears 5 px right of its expected position."
-    }
-  ]
-}
-```
-
-Offsets always mean `actual_position - expected_position`. Positive `x` is right, and positive
-`y` is down. IDs are assigned after deterministic sorting, with `canvas_size` first and remaining
-findings ordered top-to-bottom and left-to-right.
-
-Consumers should act on explicit, high-confidence `moved` findings directly. A generic `changed`
-finding means the visual difference is real but a narrower geometric explanation was not
-trustworthy; inspect its bounds and diagnostic mask rather than guessing semantics.
-
-### Movement-border suppression
-
-Large translated regions can leave tiny antialiased edges or shadows just outside the matched
-bounds. Reporting those as independent `changed` findings distracts from the movement that should
-be fixed first. After movements are finalized, the engine may defer a small residual component
-that lies entirely within the border halo of exactly one movement.
-
-The allowance scales conservatively with movement area. The halo radius is
-`ceil(sqrt(area) / 128)`, clamped to 1–8 pixels. The maximum suppressed connected area is
-`area / 512`, clamped to 16–1024 pixels. Larger residuals, residuals outside the halo, and residuals
-near multiple movements remain ordinary findings. Primary `moved`, `resized`, `added`, and
-`removed` findings are never suppressed.
-
-Suppression is prioritization, not equivalence. The report records `movement_border_regions`,
-`movement_border_pixels`, and a note recommending another comparison after the movements are
-fixed. Suppressed residuals receive no finding IDs or red annotations, while similarity metrics
-continue to measure the underlying pixels.
-
-## Similarity metrics
-
-Metrics describe similarity but do not decide equivalence or the exit code. Final filtered
-findings are the source of truth. Every report contains the same metrics over three coordinate
-mappings:
-
-- `raw` pairs pixels at identical coordinates in the canvas overlap.
-- `global_aligned` applies the detected whole-image translation before pairing overlap pixels.
-- `structural_aligned` also applies finalized, validated local movement correspondences. Each
-  expected and actual pixel is consumed at most once. Added, removed, resized, and changed content
-  is not silently warped away.
-
-Each scope reports:
-
-| Field | Range and interpretation |
-| --- | --- |
-| `compared_pixels` | Exact number of valid pixel pairs in the scope. |
-| `expected_coverage` | Compared pairs divided by expected canvas pixels, from `0` to `1`. |
-| `actual_coverage` | Compared pairs divided by actual canvas pixels, from `0` to `1`. |
-| `mae` | Mean absolute error over linear, alpha-premultiplied RGBA, from `0` to `1`; lower is better. |
-| `rmse` | Root mean squared error over the same four channels, from `0` to `1`; lower is better. |
-| `psnr_db` | Peak signal-to-noise ratio with peak `1`; higher is better. Perfect equality is JSON `null` because its mathematical value is positive infinity. |
-| `ssim` | Mean windowed structural similarity across premultiplied RGBA, from `-1` to `1`; higher is better. |
-| `changed_pixel_ratio` | Fraction of pairs above the configured perceptual threshold, from `0` to `1`; lower is better. |
-
-Coverage must be read alongside overlap-only scores: a high SSIM over a small crop does not imply
-that the complete canvases match. A `null` score with `compared_pixels == 0` means no pairs were
-available; `psnr_db: null` with nonzero pairs and zero error means a perfect scope.
-
-MAE and RMSE use linear, alpha-premultiplied RGB and normalized alpha with equal channel weight.
-Hidden RGB under fully transparent alpha therefore has no effect, while alpha changes remain
-visible. SSIM uses an 11×11 Gaussian window (`sigma = 1.5`, `K1 = 0.01`, `K2 = 0.03`, `L = 1`),
-sampled every eight pixels and adapted to the available area for smaller images.
-
-## Artifacts
-
-The CLI commits four files as one transaction after comparison, rendering, encoding, and JSON
-serialization succeed:
-
-- `report.json` is byte-for-byte identical to the JSON written to stdout, including its trailing
-  newline.
-
-- `expected.png` overlays expected-side evidence on the target.
-- `actual.png` overlays actual-side evidence on the implementation.
-- `diff.png` is a white diagnostic canvas with dashed expected bounds, solid actual bounds,
-  movement arrows, stable IDs, signed offsets, source canvas boundaries, and meaningful changed
-  residual shapes.
-
-Finding colors are blue for `moved`, purple for `resized`, green for `added`, orange for `removed`,
-red for `changed`, and neutral gray for `canvas_size`. A stable ID and color connect the JSON record
-to all applicable images.
-
-When a comparison region is active, all three full-size artifacts show its boundary as a two-pixel
-dashed cyan line. The diagnostic canvas remains white outside the region, and finding annotations
-are drawn over the boundary. Source canvas-size differences outside the region are ignored.
-
-Without `--force`, any of the four existing artifact targets aborts the operation. With `--force`,
-prior artifacts are backed up inside an atomically reserved transaction directory and restored if
-the commit cannot complete. The CLI refuses to overwrite either input, including a path alias.
-
-## Use the core library
-
-Add `better-image-diff-core` and an `image` version compatible with this workspace to another Rust
-package. The core needs no PNG codec when callers already have `RgbaImage` values.
-
-```rust
-use better_image_diff_core::{Bounds, CompareOptions, compare, render_artifacts};
-use image::{Rgba, RgbaImage};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let expected = RgbaImage::from_pixel(320, 200, Rgba([248, 249, 252, 255]));
-    let actual = expected.clone();
-    let options = CompareOptions {
-        max_offset: 64,
-        region: Some(Bounds {
-            x: 40,
-            y: 30,
-            width: 240,
-            height: 140,
-        }),
-        ..CompareOptions::default()
-    };
-
-    let comparison = compare(&expected, &actual, &options)?;
-    println!("MAE: {:?}", comparison.metrics.raw.mae);
-    println!("SSIM: {:?}", comparison.metrics.structural_aligned.ssim);
-    for difference in &comparison.differences {
-        println!("{}: {}", difference.id, difference.message);
-    }
-
-    if !comparison.equivalent {
-        let artifacts = render_artifacts(&expected, &actual, &comparison)?;
-        println!("diagnostic dimensions: {:?}", artifacts.diff.dimensions());
-    }
-    Ok(())
-}
-```
-
-`compare` and `render_artifacts` operate entirely in memory. `Comparison` contains no filesystem
-paths or process state, while `RenderedArtifacts` returns three `RgbaImage` buffers for the caller
-to store or display as appropriate.
-
-`CompareOptions::region` applies one shared full-image rectangle to both inputs. The implementation
-analyzes only that area but reports original image dimensions and rebases every finding to the
-original coordinate system. The region must have positive dimensions and fit completely inside
-both images.
-
-## Perceptual and structural behavior
-
-PNG pixels are decoded to RGBA8. Comparison converts sRGB to linear color and a Lab-like
-perceptual representation, premultiplies visible color by alpha, and retains an alpha penalty.
-The color threshold suppresses small antialiasing and rasterization differences. The minimum
-region area then removes isolated connected noise.
-
-The matcher uses deterministic image pyramids, bounded coarse-to-fine global alignment, connected
-residual proposals, local forward/reverse translation validation, and conservative residual
-classification. Repeated or textureless content is intentionally treated as ambiguous. This
-keeps the report useful to an agent: a specific geometric claim should mean more than a coincidental
-patch match.
-
-## Realistic validation fixture
-
-[`examples/realistic-ui`](examples/realistic-ui) contains an AI-generated SaaS dashboard pair used
-for release-mode end-to-end validation. It includes real-looking typography, shadows, charts,
-cards, transparency, and broad layout edits that are harder than the focused synthetic acceptance
-fixtures. Run it with:
-
-```console
-cargo run --release -p better-image-diff -- \
-  examples/realistic-ui/expected.png \
-  examples/realistic-ui/actual.png \
-  --output-dir examples/realistic-ui/output
-```
-
-The command is expected to exit `1`. Generated output is ignored by Git and can be safely
-regenerated. The CLI integration suite also takes a crop of the generated target, moves its
-complete “New Customers” card down by exactly 12 pixels, and asserts both a `moved` finding with
-offset `(0, 12)` and improved structural-aligned MAE. Focused synthetic tests remain the
-authoritative regression for the exact five-pixel, one-movement behavior.
-
-[`examples/deterministic-ui`](examples/deterministic-ui) reuses the same dashboard but constructs
-the changed image with ImageMagick instead of generative editing. It moves the middle KPI card down
-by 62 pixels and moves both panels below it down by 43 pixels, reproducing the original layout
-reflow with exact, documented ground truth and no resizing.
-
-[`examples/bounded-region`](examples/bounded-region) compares that deterministic pair through a
-five-pixel-inset mask covering only the left half. It demonstrates full-screen finding coordinates,
-the dashed cyan boundary, two visible movements, and the omission of the right-side activity panel.
+- [Deterministic UI reflow](examples/deterministic-ui/README.md): three dashboard panels move by
+  known offsets.
+- [Bounded comparison](examples/bounded-region/README.md): the same change, limited to one region
+  of the image.
 
 ## Limitations
 
-- Inputs are PNG only. JPEG, WebP, GIF, SVG, and animation are unsupported.
-- Images must use the same scale. Rotation, perspective, arbitrary affine transforms, and
-  automatic scaling are not handled.
-- Translation search is bounded by `--max-offset`.
-- Classification uses conservative visual heuristics, not DOM knowledge, OCR, or UI semantics.
-- Resizing is described but not geometrically warped for structural metrics.
-- Highly repetitive, textureless, or extensively regenerated screenshots may yield generic
-  changed/add/remove findings rather than confident movements.
-
-## Development
-
-The supported Rust version is 1.98 or newer. `rust-toolchain.toml` pins this workspace to 1.98.0
-with the `rustfmt` and `clippy` components plus the x86-64 musl target, so Rustup-backed Cargo
-commands select the correct toolchain automatically. The final validation matrix is:
-
-```console
-cargo fmt --all -- --check
-cargo check --workspace --all-targets
-cargo test --workspace --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo build --workspace --release
-```
-
-The ignored full-HD smoke test can be run separately in release mode:
-
-```console
-cargo test --release -p better-image-diff-core --test performance -- --ignored
-```
-
-### Benchmarks
-
-Criterion benchmarks exercise `better_image_diff_core::compare` on deterministic 1920×1080
-application-like screenshots. They cover identical images, one card moved five pixels, a dashboard
-with many moved and appearance-changed elements, and a 420×270 masked dialog with unrelated
-full-screen background changes. PNG decoding and artifact rendering are excluded so the
-measurements isolate structural comparison.
-
-```console
-cargo bench -p better-image-diff-core --bench comparison
-```
-
-Criterion prints statistical timing estimates and throughput in pixels per second. It stores
-detailed reports under `target/criterion/`. Each scenario validates its expected comparison result
-before measurement so an algorithm regression cannot silently produce a faster but invalid sample.
-
-The core comparison automatically uses Rayon's global thread pool for independent image
-preparation, alignment-candidate scoring, and overlapping raw SSIM with alignment and
-classification. Library consumers can configure that pool before calling the core API, or set
-`RAYON_NUM_THREADS`; no comparison option or report field changes with the thread count. For
-example, a single-thread benchmark can be used as a scaling reference:
-
-```console
-RAYON_NUM_THREADS=1 cargo bench -p better-image-diff-core --bench comparison
-```
-
-#### glibc versus musl
-
-On x86-64 Linux, the same benchmark suite can compare a Nix-provided dynamically linked glibc build
-with a statically linked musl build:
-
-```console
-bash scripts/bench-libc.sh
-```
-
-The pinned Rust toolchain includes the `x86_64-unknown-linux-musl` standard library. Criterion also
-uses a small native `alloca` helper, so this temporary comparison script uses `nix-shell` to provide
-GCC for the glibc pass and GCC plus `musl-gcc` for the musl pass. It requires Nix with access to
-Nixpkgs; neither compiler is added as a permanent system dependency.
-
-The script records glibc as Criterion's `glibc` baseline and then reports musl's statistically
-measured change against it. Results and the combined HTML report are written under
-`target/criterion-libc/`; normal `target/criterion/` results remain untouched.
-
-Both runs inherit the same Rayon configuration. Set an explicit thread count when comparing
-machines or isolating allocator and runtime behavior:
-
-```console
-RAYON_NUM_THREADS=1 bash scripts/bench-libc.sh
-```
-
-This is an end-to-end runtime comparison, not a microbenchmark of libc calls. In particular, it
-also captures allocator behavior and the difference between dynamic glibc linkage and static musl
-linkage. Criterion runs glibc first, so repeat the comparison when a small result could be explained
-by thermal or background-system noise.
+- PNG inputs only; JPEG, WebP, GIF, SVG, and animation are unsupported.
+- Images must use the same scale. Rotation, perspective, and arbitrary transforms are unsupported.
+- Movement detection is limited by `--max-offset`.
+- Repetitive, textureless, or extensively regenerated images may produce generic `changed`,
+  `added`, or `removed` findings instead of a confident movement.

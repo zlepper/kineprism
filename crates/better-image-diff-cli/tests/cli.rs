@@ -236,7 +236,7 @@ fn identical_pngs_emit_json_and_four_artifacts() {
 #[test]
 fn generated_dashboard_card_shift_is_reported_structurally() {
     let fixture =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/realistic-ui/expected.png");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/deterministic-ui/expected.png");
     let dashboard = image::open(&fixture)
         .unwrap_or_else(|error| panic!("open {}: {error}", fixture.display()))
         .to_rgba8();
