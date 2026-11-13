@@ -626,7 +626,7 @@ dependencies = [
 
 [[package]]
 name = "kineprism"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "clap",
  "image",
@@ -640,7 +640,7 @@ dependencies = [
 
 [[package]]
 name = "kineprism-core"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "criterion",
  "image",
