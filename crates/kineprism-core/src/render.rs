@@ -11,6 +11,7 @@ const RESIZED: Rgba<u8> = Rgba([145, 70, 210, 255]);
 const ADDED: Rgba<u8> = Rgba([35, 160, 85, 255]);
 const REMOVED: Rgba<u8> = Rgba([230, 135, 35, 255]);
 const CHANGED: Rgba<u8> = Rgba([220, 45, 55, 255]);
+const TEXT_CHANGED: Rgba<u8> = Rgba([200, 160, 20, 255]);
 const CANVAS: Rgba<u8> = Rgba([100, 105, 115, 255]);
 const REGION: Rgba<u8> = Rgba([0, 180, 210, 255]);
 
@@ -286,6 +287,7 @@ fn category_color(kind: DifferenceKind) -> Rgba<u8> {
         DifferenceKind::Added => ADDED,
         DifferenceKind::Removed => REMOVED,
         DifferenceKind::Changed => CHANGED,
+        DifferenceKind::TextChanged => TEXT_CHANGED,
     }
 }
 

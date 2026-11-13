@@ -1,5 +1,6 @@
+use crate::antialias::{self, PixelMatch};
 use crate::color::NormalizedImage;
-use crate::local_geometry::padded;
+use crate::local_geometry::{contains, padded};
 use crate::mapping::MovementMapping;
 use crate::mask::{Component, Mask};
 use crate::{
@@ -17,10 +18,16 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) movements: &'a [MovementMapping],
 }
 
+pub(crate) struct Residuals {
+    pub(crate) suppression: SuppressionSummary,
+    /// Expected-image pixels tolerated as antialiasing at the global alignment, when ignored.
+    pub(crate) antialiased: Option<Mask>,
+}
+
 pub(crate) fn append_unhandled(
     context: AnalysisContext<'_>,
     differences: &mut Vec<Difference>,
-) -> Result<SuppressionSummary, CompareError> {
+) -> Result<Residuals, CompareError> {
     let AnalysisContext {
         expected,
         actual,
@@ -30,12 +37,10 @@ pub(crate) fn append_unhandled(
         handled_actual,
         movements,
     } = context;
-    let mut expected_mask = aligned_mask(expected, actual, alignment, options)?;
-    let reverse = Offset {
-        x: alignment.x.saturating_neg(),
-        y: alignment.y.saturating_neg(),
-    };
-    let mut actual_mask = aligned_mask(actual, expected, reverse, options)?;
+    let (mut expected_mask, antialiased) =
+        aligned_mask(expected, actual, alignment, options, true)?;
+    let reverse = alignment.reversed();
+    let (mut actual_mask, _) = aligned_mask(actual, expected, reverse, options, false)?;
     clear_bounds(&mut expected_mask, handled_expected, expected);
     clear_translated_bounds(&mut expected_mask, handled_actual, reverse, expected);
     clear_bounds(&mut actual_mask, handled_actual, actual);
@@ -95,7 +100,47 @@ pub(crate) fn append_unhandled(
         false,
         differences,
     );
-    Ok(suppression)
+    Ok(Residuals {
+        suppression,
+        antialiased,
+    })
+}
+
+/// Counts tolerated antialiased pixels outside reported findings, validated movements and
+/// suppressed text, whose pixels remain reported, only differ at the global alignment because
+/// they moved, or are already counted as text.
+pub(crate) fn count_antialiased(
+    mut antialiased: Mask,
+    differences: &[Difference],
+    movements: &[MovementMapping],
+    suppressed_text: &[Bounds],
+    alignment: Offset,
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+) -> u64 {
+    let reverse = alignment.reversed();
+    for difference in differences {
+        if let Some(bounds) = difference.expected_bounds {
+            clear_one_bounds(&mut antialiased, bounds, expected);
+        }
+        if let Some(bounds) = difference.actual_bounds {
+            clear_translated_bounds(&mut antialiased, &[bounds], reverse, expected);
+        }
+    }
+    for movement in movements {
+        clear_one_bounds(&mut antialiased, movement.bounds, expected);
+        if let Some(moved) =
+            movement
+                .bounds
+                .translated_clipped(movement.offset, actual.width(), actual.height())
+        {
+            clear_translated_bounds(&mut antialiased, &[moved], reverse, expected);
+        }
+    }
+    for bounds in suppressed_text {
+        clear_one_bounds(&mut antialiased, *bounds, expected);
+    }
+    antialiased.count()
 }
 
 fn movement_border_suppression(
@@ -139,10 +184,7 @@ fn component_borders_movement(
         movement
             .bounds
             .translated_clipped(movement.offset, actual.width(), actual.height());
-    let reverse_alignment = Offset {
-        x: alignment.x.saturating_neg(),
-        y: alignment.y.saturating_neg(),
-    };
+    let reverse_alignment = alignment.reversed();
     if component_is_expected {
         borders(
             component,
@@ -180,13 +222,6 @@ fn borders(component: Bounds, movement: Bounds, radius: u32, width: u32, height:
         && contains(padded(movement, radius, width, height), component)
 }
 
-fn contains(outer: Bounds, inner: Bounds) -> bool {
-    inner.x >= outer.x
-        && inner.y >= outer.y
-        && inner.right() <= outer.right()
-        && inner.bottom() <= outer.bottom()
-}
-
 fn suppression_radius(bounds: Bounds) -> u32 {
     let root = bounds.area().isqrt();
     u32::try_from(root.div_ceil(128).clamp(1, 8)).unwrap_or(8)
@@ -201,8 +236,7 @@ pub(crate) fn significant_pair(
     expected_bounds: Bounds,
     actual: &NormalizedImage,
     actual_bounds: Bounds,
-    threshold: f64,
-    minimum_area: u32,
+    options: &CompareOptions,
 ) -> bool {
     let width = expected_bounds.width.min(actual_bounds.width);
     let height = expected_bounds.height.min(actual_bounds.height);
@@ -211,49 +245,54 @@ pub(crate) fn significant_pair(
     };
     for y in 0..height {
         for x in 0..width {
-            if expected
-                .pixel(expected_bounds.x + x, expected_bounds.y + y)
-                .perceptual_distance(actual.pixel(actual_bounds.x + x, actual_bounds.y + y))
-                > threshold
-            {
+            if antialias::differs(
+                expected,
+                (expected_bounds.x + x, expected_bounds.y + y),
+                actual,
+                (actual_bounds.x + x, actual_bounds.y + y),
+                options,
+            ) {
                 mask.set(x, y, true);
             }
         }
     }
-    mask.components(minimum_area)
+    mask.components(options.min_region_area)
         .map_or(true, |components| !components.is_empty())
 }
 
+/// Builds the changed-pixel mask of `source` and, when `track_antialiased` is set and
+/// antialiasing is ignored, a mask of pixels that only differ because of antialiasing.
 fn aligned_mask(
     source: &NormalizedImage,
     target: &NormalizedImage,
     offset: Offset,
     options: &CompareOptions,
-) -> Result<Mask, CompareError> {
+    track_antialiased: bool,
+) -> Result<(Mask, Option<Mask>), CompareError> {
     let mut mask = Mask::try_new(source.width(), source.height())?;
+    let mut antialiased = if track_antialiased && options.ignore_antialiasing {
+        Some(Mask::try_new(source.width(), source.height())?)
+    } else {
+        None
+    };
     for y in 0..source.height() {
         for x in 0..source.width() {
-            let target_x = i64::from(x) + i64::from(offset.x);
-            let target_y = i64::from(y) + i64::from(offset.y);
-            if target_x < 0
-                || target_y < 0
-                || target_x >= i64::from(target.width())
-                || target_y >= i64::from(target.height())
-            {
+            let Some(mapped) = offset.translate_point((x, y), target.width(), target.height())
+            else {
                 continue;
-            }
-            let target_x = u32::try_from(target_x).expect("checked residual x");
-            let target_y = u32::try_from(target_y).expect("checked residual y");
-            if source
-                .pixel(x, y)
-                .perceptual_distance(target.pixel(target_x, target_y))
-                > options.color_threshold
-            {
-                mask.set(x, y, true);
+            };
+            match antialias::compare(source, (x, y), target, mapped, options) {
+                PixelMatch::Same => {}
+                PixelMatch::Antialiased => {
+                    if let Some(antialiased) = &mut antialiased {
+                        antialiased.set(x, y, true);
+                    }
+                }
+                PixelMatch::Different => mask.set(x, y, true),
             }
         }
     }
-    Ok(mask)
+    Ok((mask, antialiased))
 }
 
 fn append_unmatched_canvas_regions(
@@ -560,7 +599,8 @@ mod tests {
             },
             &mut differences,
         )
-        .expect("residual analysis");
+        .expect("residual analysis")
+        .suppression;
 
         assert_eq!(suppression.movement_border_regions, 2);
         assert_eq!(suppression.movement_border_pixels, 40);

@@ -1,3 +1,4 @@
+use crate::antialias;
 use crate::color::NormalizedImage;
 use crate::local_geometry::{horizontal_gap, nearby, padded, union, vertical_overlap};
 use crate::mask::Mask;
@@ -154,10 +155,7 @@ pub(crate) fn detect(
         }) {
             continue;
         }
-        let reverse_global = Offset {
-            x: global.x.saturating_neg(),
-            y: global.y.saturating_neg(),
-        };
+        let reverse_global = global.reversed();
         let reverse = search(
             actual,
             actual_bounds,
@@ -166,10 +164,7 @@ pub(crate) fn detect(
             options.max_offset,
         )
         .best();
-        let expected_reverse = Offset {
-            x: best.offset.x.saturating_neg(),
-            y: best.offset.y.saturating_neg(),
-        };
+        let expected_reverse = best.offset.reversed();
         if reverse.is_none_or(|candidate| distance(candidate.offset, expected_reverse) > 2) {
             continue;
         }
@@ -198,22 +193,11 @@ fn residual_proposals(
     let mut mask = Mask::try_new(expected.width(), expected.height())?;
     for y in 0..expected.height() {
         for x in 0..expected.width() {
-            let actual_x = i64::from(x) + i64::from(global.x);
-            let actual_y = i64::from(y) + i64::from(global.y);
-            if actual_x < 0
-                || actual_y < 0
-                || actual_x >= i64::from(actual.width())
-                || actual_y >= i64::from(actual.height())
-            {
+            let Some(mapped) = global.translate_point((x, y), actual.width(), actual.height())
+            else {
                 continue;
-            }
-            let actual_x = u32::try_from(actual_x).expect("checked local residual x");
-            let actual_y = u32::try_from(actual_y).expect("checked local residual y");
-            if expected
-                .pixel(x, y)
-                .perceptual_distance(actual.pixel(actual_x, actual_y))
-                > options.color_threshold
-            {
+            };
+            if antialias::differs(expected, (x, y), actual, mapped, options) {
                 mask.set(x, y, true);
             }
         }

@@ -36,6 +36,10 @@ impl ImageDiffServer {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool is an independent request flag"
+)]
 struct CompareUiImagesRequest {
     /// Absolute path to the reference UI screenshot PNG.
     expected_path: String,
@@ -51,6 +55,17 @@ struct CompareUiImagesRequest {
     min_region_area: Option<u32>,
     /// Optional rectangle restricting the comparison to a UI region.
     region: Option<Region>,
+    /// Treat differences that look like antialiased edges as equivalent. Defaults to false.
+    #[serde(default)]
+    ignore_antialiasing: bool,
+    /// Report differences confined to same-style, same-position text as text-changed. Defaults
+    /// to false.
+    #[serde(default)]
+    classify_text: bool,
+    /// Suppress differences confined to same-style, same-position text. Implies `classify_text`.
+    /// Defaults to false.
+    #[serde(default)]
+    ignore_text: bool,
     /// Replace the four managed artifacts when they already exist. Defaults to false.
     #[serde(default)]
     force: bool,
@@ -193,6 +208,7 @@ fn write_summary(output: &mut String, summary: &kineprism_core::ComparisonSummar
         ("added", summary.added),
         ("removed", summary.removed),
         ("changed", summary.changed),
+        ("text-changed", summary.text_changed),
         ("canvas-size", summary.canvas_size),
     ] {
         if count > 0 {
@@ -246,6 +262,22 @@ fn write_suppression(output: &mut String, suppression: &kineprism_core::Suppress
         )
         .expect("write to string");
     }
+    if suppression.text_regions > 0 {
+        writeln!(
+            output,
+            "Suppressed text: {} region(s), {} px.",
+            suppression.text_regions, suppression.text_pixels
+        )
+        .expect("write to string");
+    }
+    if suppression.antialiased_pixels > 0 {
+        writeln!(
+            output,
+            "Antialiased pixels treated as equivalent: {} px.",
+            suppression.antialiased_pixels
+        )
+        .expect("write to string");
+    }
 }
 
 fn metric_value(value: Option<f64>) -> String {
@@ -282,6 +314,9 @@ fn comparison_request(
                 width: region.width,
                 height: region.height,
             }),
+            ignore_antialiasing: request.ignore_antialiasing,
+            classify_text: request.classify_text,
+            ignore_text: request.ignore_text,
         },
         force: request.force,
     })

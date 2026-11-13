@@ -38,6 +38,9 @@ kineprism <EXPECTED> <ACTUAL> --output-dir <PATH>
     [--min-region-area <PIXELS>]
     [--region-x <PIXELS> --region-y <PIXELS>
      --region-width <PIXELS> --region-height <PIXELS>]
+    [--ignore-antialiasing]
+    [--classify-text]
+    [--ignore-text]
     [--force]
 ```
 
@@ -47,6 +50,9 @@ kineprism <EXPECTED> <ACTUAL> --output-dir <PATH>
 - `--min-region-area` ignores smaller differences; the default is `16` pixels.
 - `--region-x`, `--region-y`, `--region-width`, and `--region-height` compare only the specified
   rectangle. All four are required together.
+- `--ignore-antialiasing` treats antialiased edge differences as equivalent.
+- `--classify-text` reports text that changes in place, in the same style, as `text_changed`.
+- `--ignore-text` suppresses those text changes, e.g. for timestamps or counters.
 - `--force` replaces the tool's existing output files. Other files in the output directory are
   preserved.
 
@@ -78,8 +84,9 @@ creates annotated copies of each input (`expected.png` and `actual.png`) plus `d
 summary of the findings.
 
 Each finding has a stable ID, type, bounds, and human-readable message. Moved regions also include
-their offset and confidence. When the tool cannot make a reliable structural classification, it
-reports the affected area as `changed`.
+their offset and confidence. With `--classify-text`, text changes are reported as `text_changed`.
+When the tool cannot make a reliable structural classification, it reports the affected area as
+`changed`.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -103,3 +110,4 @@ Exit code `1` is an expected comparison result and can be used in visual-regress
 - Movement detection is limited by `--max-offset`.
 - Repetitive, textureless, or extensively regenerated images may produce generic `changed`,
   `added`, or `removed` findings instead of a confident movement.
+- Text detection is heuristic: it needs two or more glyphs on a flat background.

@@ -22,14 +22,32 @@ pub(crate) fn horizontal_gap(left: Bounds, right: Bounds) -> u32 {
 }
 
 pub(crate) fn padded(bounds: Bounds, padding: u32, width: u32, height: u32) -> Bounds {
-    let x = bounds.x.saturating_sub(padding);
-    let y = bounds.y.saturating_sub(padding);
+    padded_axes(bounds, padding, padding, width, height)
+}
+
+/// Pads horizontally and vertically by separate amounts, clipped to a `width` by `height` canvas.
+pub(crate) fn padded_axes(
+    bounds: Bounds,
+    horizontal: u32,
+    vertical: u32,
+    width: u32,
+    height: u32,
+) -> Bounds {
+    let x = bounds.x.saturating_sub(horizontal);
+    let y = bounds.y.saturating_sub(vertical);
     Bounds {
         x,
         y,
-        width: bounds.right().saturating_add(padding).min(width) - x,
-        height: bounds.bottom().saturating_add(padding).min(height) - y,
+        width: bounds.right().saturating_add(horizontal).min(width) - x,
+        height: bounds.bottom().saturating_add(vertical).min(height) - y,
     }
+}
+
+pub(crate) fn contains(outer: Bounds, inner: Bounds) -> bool {
+    inner.x >= outer.x
+        && inner.y >= outer.y
+        && inner.right() <= outer.right()
+        && inner.bottom() <= outer.bottom()
 }
 
 pub(crate) fn union(left: Bounds, right: Bounds) -> Bounds {

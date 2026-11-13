@@ -120,6 +120,9 @@ fn help_describes_the_public_arguments() {
     assert!(stdout.contains("--region-y"));
     assert!(stdout.contains("--region-width"));
     assert!(stdout.contains("--region-height"));
+    assert!(stdout.contains("--ignore-antialiasing"));
+    assert!(stdout.contains("--classify-text"));
+    assert!(stdout.contains("--ignore-text"));
     assert!(stdout.contains("--force"));
     assert!(stdout.contains("mcp"));
 }
@@ -154,6 +157,12 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
             .iter()
             .any(|parameter| parameter == "expected_path")
     );
+    for option in ["ignore_antialiasing", "classify_text", "ignore_text"] {
+        assert!(
+            tool.input_schema["properties"].get(option).is_some(),
+            "missing {option}"
+        );
+    }
 
     let arguments = serde_json::json!({
         "expected_path": expected_path,
@@ -491,8 +500,14 @@ fn identical_pngs_emit_json_and_four_artifacts() {
     assert_eq!(report["settings"]["color_threshold"], 2.3);
     assert_eq!(report["settings"]["min_region_area"], 16);
     assert!(report["settings"].get("region").is_none());
+    assert_eq!(report["settings"]["ignore_antialiasing"], false);
+    assert_eq!(report["settings"]["classify_text"], false);
+    assert_eq!(report["settings"]["ignore_text"], false);
     assert_eq!(report["suppression"]["movement_border_regions"], 0);
     assert_eq!(report["suppression"]["movement_border_pixels"], 0);
+    assert_eq!(report["suppression"]["text_regions"], 0);
+    assert_eq!(report["suppression"]["text_pixels"], 0);
+    assert_eq!(report["suppression"]["antialiased_pixels"], 0);
     assert!(report["suppression"].get("message").is_none());
     assert_eq!(
         fs::read(output_directory.join("report.json")).expect("read JSON report"),
@@ -651,6 +666,70 @@ fn meaningful_differences_exit_one() {
     );
     assert!(difference.get("expected_bounds").is_none());
     assert!(difference.get("offset").is_none());
+}
+
+/// Draws a row of simple solid glyphs; `I` is a vertical bar and `L` adds a foot to it.
+fn draw_glyph_row(image: &mut RgbaImage, glyphs: &str) {
+    let ink = Rgba([30, 34, 40, 255]);
+    for (index, glyph) in (0_u32..).zip(glyphs.chars()) {
+        let x = 10 + index * 10;
+        for y in 10..24 {
+            image.put_pixel(x, y, ink);
+            image.put_pixel(x + 1, y, ink);
+        }
+        if glyph == 'L' {
+            for foot in x + 2..x + 6 {
+                image.put_pixel(foot, 22, ink);
+                image.put_pixel(foot, 23, ink);
+            }
+        }
+    }
+}
+
+#[test]
+fn text_changes_are_classified_on_request_unless_ignored() {
+    let directory = TestDirectory::new();
+    let expected_path = directory.path().join("expected.png");
+    let actual_path = directory.path().join("actual.png");
+    let mut expected = RgbaImage::from_pixel(60, 34, Rgba([255, 255, 255, 255]));
+    let mut actual = expected.clone();
+    draw_glyph_row(&mut expected, "III");
+    draw_glyph_row(&mut actual, "ILI");
+    expected.save(&expected_path).expect("save expected");
+    actual.save(&actual_path).expect("save actual");
+    let run = |output: &str, extra: &[&str]| {
+        command()
+            .args([expected_path.as_os_str(), actual_path.as_os_str()])
+            .arg("--output-dir")
+            .arg(directory.path().join(output))
+            .args(extra)
+            .output()
+            .expect("run CLI")
+    };
+
+    let unclassified = run("unclassified", &[]);
+    let reported = run("reported", &["--classify-text"]);
+    let ignored = run("ignored", &["--ignore-text", "--ignore-antialiasing"]);
+
+    assert_eq!(
+        unclassified.status.code(),
+        Some(1),
+        "{:?}",
+        unclassified.stderr
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&unclassified.stdout).expect("JSON report");
+    assert_eq!(report["summary"]["text_changed"], 0);
+    assert_eq!(reported.status.code(), Some(1), "{:?}", reported.stderr);
+    let report: serde_json::Value = serde_json::from_slice(&reported.stdout).expect("JSON report");
+    assert_eq!(report["summary"]["text_changed"], 1);
+    assert_eq!(report["summary"]["total"], 1, "{report}");
+    assert_eq!(report["differences"][0]["kind"], "text_changed");
+    assert_eq!(ignored.status.code(), Some(0), "{:?}", ignored.stderr);
+    let report: serde_json::Value = serde_json::from_slice(&ignored.stdout).expect("JSON report");
+    assert_eq!(report["settings"]["ignore_text"], true);
+    assert_eq!(report["settings"]["ignore_antialiasing"], true);
+    assert_eq!(report["suppression"]["text_regions"], 1);
 }
 
 #[test]

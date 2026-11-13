@@ -15,6 +15,13 @@ pub struct CompareOptions {
     /// Optional full-image rectangle restricting every comparison scope.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<Bounds>,
+    /// Treat differing pixels that look like antialiased edges in both images as equivalent.
+    pub ignore_antialiasing: bool,
+    /// Report differences confined to same-style, same-position text as `text_changed`.
+    pub classify_text: bool,
+    /// Record text-only differences in the suppression summary instead of reporting them. Implies
+    /// text classification.
+    pub ignore_text: bool,
 }
 
 impl Default for CompareOptions {
@@ -24,6 +31,9 @@ impl Default for CompareOptions {
             color_threshold: 2.3,
             min_region_area: 16,
             region: None,
+            ignore_antialiasing: false,
+            classify_text: false,
+            ignore_text: false,
         }
     }
 }
@@ -111,6 +121,8 @@ pub enum DifferenceKind {
     Removed,
     /// Content differs without a more reliable explanation.
     Changed,
+    /// Text in the same style and position reads differently.
+    TextChanged,
 }
 
 impl Display for DifferenceKind {
@@ -122,6 +134,7 @@ impl Display for DifferenceKind {
             Self::Added => "added",
             Self::Removed => "removed",
             Self::Changed => "changed",
+            Self::TextChanged => "text_changed",
         };
         formatter.write_str(value)
     }
@@ -203,6 +216,8 @@ pub struct ComparisonSummary {
     pub removed: u32,
     /// Generically changed regions.
     pub changed: u32,
+    /// Regions whose text content changed.
+    pub text_changed: u32,
     /// Canvas-size records.
     pub canvas_size: u32,
 }
@@ -214,6 +229,13 @@ pub struct SuppressionSummary {
     pub movement_border_regions: u32,
     /// Connected changed pixels contained by those suppressed regions.
     pub movement_border_pixels: u64,
+    /// Text-only difference regions suppressed because text differences are ignored.
+    pub text_regions: u32,
+    /// Changed pixels contained by those suppressed text regions.
+    pub text_pixels: u64,
+    /// Pixels beyond the color threshold treated as equivalent because they look antialiased,
+    /// outside reported findings and validated movements.
+    pub antialiased_pixels: u64,
     /// Human- and agent-readable guidance when any residuals were suppressed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
@@ -225,21 +247,51 @@ impl SuppressionSummary {
         self.movement_border_pixels = self
             .movement_border_pixels
             .saturating_add(u64::from(pixels));
-        self.message = Some(format!(
-            "Suppressed {} small residual {} ({} px) bordering validated movements. Recheck {} after correcting the reported movements.",
-            self.movement_border_regions,
-            if self.movement_border_regions == 1 {
-                "region"
-            } else {
-                "regions"
-            },
-            self.movement_border_pixels,
-            if self.movement_border_regions == 1 {
-                "it"
-            } else {
-                "them"
-            }
-        ));
+        self.refresh_message();
+    }
+
+    pub(crate) fn record_text(&mut self, pixels: u64) {
+        self.text_regions = self.text_regions.saturating_add(1);
+        self.text_pixels = self.text_pixels.saturating_add(pixels);
+        self.refresh_message();
+    }
+
+    pub(crate) fn record_antialiasing(&mut self, pixels: u64) {
+        self.antialiased_pixels = self.antialiased_pixels.saturating_add(pixels);
+        self.refresh_message();
+    }
+
+    fn refresh_message(&mut self) {
+        let mut sentences = Vec::new();
+        if self.movement_border_regions > 0 {
+            let single = self.movement_border_regions == 1;
+            sentences.push(format!(
+                "Suppressed {} small residual {} ({} px) bordering validated movements. Recheck {} after correcting the reported movements.",
+                self.movement_border_regions,
+                if single { "region" } else { "regions" },
+                self.movement_border_pixels,
+                if single { "it" } else { "them" }
+            ));
+        }
+        if self.text_regions > 0 {
+            sentences.push(format!(
+                "Suppressed {} text {} ({} px) because text differences are ignored.",
+                self.text_regions,
+                if self.text_regions == 1 {
+                    "region"
+                } else {
+                    "regions"
+                },
+                self.text_pixels
+            ));
+        }
+        if self.antialiased_pixels > 0 {
+            sentences.push(format!(
+                "Treated {} antialiased edge px as equivalent.",
+                self.antialiased_pixels
+            ));
+        }
+        self.message = (!sentences.is_empty()).then(|| sentences.join(" "));
     }
 }
 

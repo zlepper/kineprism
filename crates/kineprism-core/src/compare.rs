@@ -328,6 +328,7 @@ fn summarize(differences: &[Difference]) -> ComparisonSummary {
             DifferenceKind::Added => &mut summary.added,
             DifferenceKind::Removed => &mut summary.removed,
             DifferenceKind::Changed => &mut summary.changed,
+            DifferenceKind::TextChanged => &mut summary.text_changed,
         };
         *count = count.saturating_add(1);
     }

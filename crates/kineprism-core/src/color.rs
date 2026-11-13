@@ -2,6 +2,9 @@ use image::{Rgba, RgbaImage};
 
 use crate::CompareError;
 
+/// Largest perceptual distance from a color ramp that still counts as a blend along it.
+pub(crate) const RAMP_TOLERANCE: f64 = 8.0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct NormalizedPixel {
     channels: [f32; 4],
@@ -15,6 +18,46 @@ impl NormalizedPixel {
 
     pub(crate) fn channel(self, index: usize) -> f64 {
         f64::from(self.channels[index])
+    }
+
+    pub(crate) fn lightness(self) -> f64 {
+        f64::from(self.perceptual[0])
+    }
+
+    /// Perceptual distance from the straight color ramp between `start` and `end`, such as the
+    /// blends an antialiased edge produces between two flat colors.
+    pub(crate) fn ramp_distance(self, start: Self, end: Self) -> f64 {
+        let pixel = self.perceptual.map(f64::from);
+        let start = start.perceptual.map(f64::from);
+        let end = end.perceptual.map(f64::from);
+        let direction: [f64; 4] = std::array::from_fn(|index| end[index] - start[index]);
+        let offset: [f64; 4] = std::array::from_fn(|index| pixel[index] - start[index]);
+        let length: f64 = direction.iter().map(|value| value * value).sum();
+        let along = if length > 0.0 {
+            (offset
+                .iter()
+                .zip(direction)
+                .map(|(offset, direction)| offset * direction)
+                .sum::<f64>()
+                / length)
+                .clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        offset
+            .iter()
+            .zip(direction)
+            .map(|(offset, direction)| {
+                let residual = offset - direction * along;
+                residual * residual
+            })
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    /// Exact identity key; identical keys always describe the same perceived color.
+    pub(crate) fn key(self) -> [u32; 4] {
+        self.perceptual.map(f32::to_bits)
     }
 
     pub(crate) fn perceptual_distance(self, other: Self) -> f64 {
@@ -137,6 +180,18 @@ fn lab_curve(value: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ramp_distance_is_zero_on_the_blend_and_large_off_it() {
+        let white = normalize(Rgba([255, 255, 255, 255]));
+        let black = normalize(Rgba([0, 0, 0, 255]));
+        let gray = normalize(Rgba([128, 128, 128, 255]));
+        let red = normalize(Rgba([255, 0, 0, 255]));
+
+        assert!(white.ramp_distance(white, black) < 1e-9);
+        assert!(gray.ramp_distance(white, black) < 1e-3);
+        assert!(red.ramp_distance(white, black) > RAMP_TOLERANCE);
+    }
 
     #[test]
     fn transparent_rgb_is_normalized_away() {

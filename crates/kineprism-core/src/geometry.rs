@@ -70,6 +70,28 @@ impl Bounds {
     }
 }
 
+impl Offset {
+    /// Returns the translation in the opposite direction.
+    pub(crate) fn reversed(self) -> Self {
+        Self {
+            x: self.x.saturating_neg(),
+            y: self.y.saturating_neg(),
+        }
+    }
+
+    /// Translates a point, returning `None` when it leaves a `width` by `height` canvas.
+    pub(crate) fn translate_point(
+        self,
+        (x, y): (u32, u32),
+        width: u32,
+        height: u32,
+    ) -> Option<(u32, u32)> {
+        let x = u32::try_from(i64::from(x) + i64::from(self.x)).ok()?;
+        let y = u32::try_from(i64::from(y) + i64::from(self.y)).ok()?;
+        (x < width && y < height).then_some((x, y))
+    }
+}
+
 fn clamped_u32(value: i64) -> u32 {
     u32::try_from(value).unwrap_or(if value < 0 { 0 } else { u32::MAX })
 }

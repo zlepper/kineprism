@@ -14,7 +14,10 @@
   "settings": {
     "max_offset": 128,
     "color_threshold": 2.3,
-    "min_region_area": 16
+    "min_region_area": 16,
+    "ignore_antialiasing": false,
+    "classify_text": false,
+    "ignore_text": false
   },
   "alignment": {
     "offset": {
@@ -62,11 +65,15 @@
     "added": 0,
     "removed": 0,
     "changed": 0,
+    "text_changed": 0,
     "canvas_size": 0
   },
   "suppression": {
     "movement_border_regions": 3,
     "movement_border_pixels": 61,
+    "text_regions": 0,
+    "text_pixels": 0,
+    "antialiased_pixels": 0,
     "message": "Suppressed 3 small residual regions (61 px) bordering validated movements. Recheck them after correcting the reported movements."
   },
   "differences": [

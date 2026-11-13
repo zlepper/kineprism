@@ -34,6 +34,10 @@ impl Mask {
         self.values[index] = value;
     }
 
+    pub(crate) fn count(&self) -> u64 {
+        self.values.iter().map(|value| u64::from(*value)).sum()
+    }
+
     pub(crate) fn components(&self, minimum_area: u32) -> Result<Vec<Component>, CompareError> {
         let mut visited = Vec::new();
         visited

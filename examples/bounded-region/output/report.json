@@ -20,7 +20,10 @@
       "y": 5,
       "width": 714,
       "height": 1076
-    }
+    },
+    "ignore_antialiasing": false,
+    "classify_text": false,
+    "ignore_text": false
   },
   "alignment": {
     "offset": {
@@ -68,11 +71,15 @@
     "added": 0,
     "removed": 0,
     "changed": 0,
+    "text_changed": 0,
     "canvas_size": 0
   },
   "suppression": {
     "movement_border_regions": 2,
     "movement_border_pixels": 35,
+    "text_regions": 0,
+    "text_pixels": 0,
+    "antialiased_pixels": 0,
     "message": "Suppressed 2 small residual regions (35 px) bordering validated movements. Recheck them after correcting the reported movements."
   },
   "differences": [

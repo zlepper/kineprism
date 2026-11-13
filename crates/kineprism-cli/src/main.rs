@@ -34,6 +34,10 @@ enum Command {
 }
 
 #[derive(Debug, ClapArgs)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool is an independent command-line flag"
+)]
 struct ComparisonArgs {
     /// Target or reference PNG.
     expected: Option<PathBuf>,
@@ -66,6 +70,15 @@ struct ComparisonArgs {
     /// Height of the optional comparison region.
     #[arg(long, requires = "region_x")]
     region_height: Option<u32>,
+    /// Treat differences that look like antialiased edges as equivalent.
+    #[arg(long)]
+    ignore_antialiasing: bool,
+    /// Report differences confined to same-style, same-position text as `text_changed`.
+    #[arg(long)]
+    classify_text: bool,
+    /// Suppress differences confined to same-style, same-position text. Implies --classify-text.
+    #[arg(long)]
+    ignore_text: bool,
     /// Replace the four known artifacts if they exist.
     #[arg(long)]
     force: bool,
@@ -130,6 +143,9 @@ fn run(arguments: &ComparisonArgs) -> Result<bool, CliError> {
         color_threshold: arguments.color_threshold,
         min_region_area: arguments.min_region_area,
         region: comparison_region(arguments),
+        ignore_antialiasing: arguments.ignore_antialiasing,
+        classify_text: arguments.classify_text,
+        ignore_text: arguments.ignore_text,
     };
     let request = ComparisonRequest {
         expected: expected.clone(),

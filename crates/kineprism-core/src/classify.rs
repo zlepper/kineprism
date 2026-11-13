@@ -10,6 +10,7 @@ use crate::matching::{
 use crate::movement;
 use crate::proposals::{self, Proposal};
 use crate::residual;
+use crate::text;
 use crate::{
     Alignment, Bounds, CompareError, CompareOptions, Difference, DifferenceKind, Offset,
     SuppressionSummary,
@@ -129,18 +130,7 @@ pub(crate) fn analyze(
     movement::coalesce(&mut output.differences, &mut output.movements)?;
     append_unpaired_differences(&pairs, &expected_proposals, &actual_proposals, &mut output);
 
-    let suppression = residual::append_unhandled(
-        residual::AnalysisContext {
-            expected,
-            actual,
-            alignment: alignment.offset,
-            options,
-            handled_expected: &output.handled_expected,
-            handled_actual: &output.handled_actual,
-            movements: &output.movements,
-        },
-        &mut output.differences,
-    )?;
+    let suppression = explain_remaining(expected, actual, alignment.offset, options, &mut output)?;
 
     Ok(StructuralAnalysis {
         alignment,
@@ -148,6 +138,59 @@ pub(crate) fn analyze(
         movements: output.movements,
         suppression,
     })
+}
+
+/// Reports residual pixels no structural finding explains, then recognizes text-only changes when
+/// requested.
+fn explain_remaining(
+    expected: &NormalizedImage,
+    actual: &NormalizedImage,
+    alignment: Offset,
+    options: &CompareOptions,
+    output: &mut ClassificationOutput,
+) -> Result<SuppressionSummary, CompareError> {
+    let residual::Residuals {
+        mut suppression,
+        antialiased,
+    } = residual::append_unhandled(
+        residual::AnalysisContext {
+            expected,
+            actual,
+            alignment,
+            options,
+            handled_expected: &output.handled_expected,
+            handled_actual: &output.handled_actual,
+            movements: &output.movements,
+        },
+        &mut output.differences,
+    )?;
+    let suppressed_text = if options.classify_text || options.ignore_text {
+        text::classify(
+            expected,
+            actual,
+            alignment,
+            options,
+            &mut output.differences,
+            &mut suppression,
+        )?
+    } else {
+        Vec::new()
+    };
+    if let Some(antialiased) = antialiased {
+        let pixels = residual::count_antialiased(
+            antialiased,
+            &output.differences,
+            &output.movements,
+            &suppressed_text,
+            alignment,
+            expected,
+            actual,
+        );
+        if pixels > 0 {
+            suppression.record_antialiasing(pixels);
+        }
+    }
+    Ok(suppression)
 }
 
 fn extract_proposals(
@@ -302,10 +345,7 @@ fn append_global_movement(
         actual_image.width(),
         actual_image.height(),
     ) {
-        let reverse = Offset {
-            x: alignment.offset.x.saturating_neg(),
-            y: alignment.offset.y.saturating_neg(),
-        };
+        let reverse = alignment.offset.reversed();
         let expected_bounds = actual_bounds
             .translated_clipped(reverse, expected_image.width(), expected_image.height())
             .unwrap_or(expected_canvas);
@@ -339,8 +379,7 @@ fn append_paired_differences(
                 expected_proposal.bounds,
                 context.actual_image,
                 actual_proposal.bounds,
-                context.options.color_threshold,
-                context.options.min_region_area,
+                context.options,
             );
 
         if good_match && same_size && offset == context.alignment.offset && !has_residual {

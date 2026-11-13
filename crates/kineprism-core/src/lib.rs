@@ -1,6 +1,7 @@
 //! Structural image comparison primitives used by the CLI and other Rust tools.
 
 mod alignment;
+mod antialias;
 mod classify;
 mod color;
 mod compare;
@@ -20,6 +21,7 @@ mod render_font;
 mod render_primitives;
 mod report;
 mod residual;
+mod text;
 
 pub use compare::compare;
 pub use error::{CompareError, RenderError};
