@@ -4,18 +4,18 @@
 )]
 
 use std::fs;
-use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use image::{ImageFormat, Rgba, RgbaImage};
 use rayon::ThreadPoolBuilder;
 use rmcp::{
     ClientHandler, ServiceExt,
     model::{
-        CallToolRequestParams, ClientCapabilities, ClientInfo, Implementation, ListRootsResult,
-        Root,
+        CallToolRequestParams, CallToolResult, ClientCapabilities, ClientInfo, Implementation,
+        ListRootsResult, Root,
     },
     service::{RequestContext, RoleClient},
     transport::{ConfigureCommandExt, TokioChildProcess},
@@ -49,55 +49,81 @@ fn command() -> Command {
     Command::new(env!("CARGO_BIN_EXE_kineprism"))
 }
 
+/// How the test client responds to the server's `roots/list` requests.
+#[derive(Clone)]
+enum Roots {
+    /// Advertises the roots capability and answers with this root URI.
+    Answer(String),
+    /// Advertises no roots capability and never answers `roots/list`.
+    NotSupported,
+    /// Advertises the roots capability but never answers `roots/list`.
+    Unresponsive,
+    /// Advertises the roots capability and answers `roots/list` with an empty list.
+    Empty,
+    /// Advertises the roots capability and answers `roots/list` with an error.
+    Failing,
+}
+
 struct McpTestClient {
-    root_uri: Option<String>,
+    roots: Roots,
 }
 
 impl ClientHandler for McpTestClient {
     fn get_info(&self) -> ClientInfo {
-        let capabilities = if self.root_uri.is_some() {
-            ClientCapabilities::builder().enable_roots().build()
-        } else {
-            ClientCapabilities::builder().build()
+        let capabilities = match self.roots {
+            Roots::NotSupported => ClientCapabilities::builder().build(),
+            Roots::Answer(_) | Roots::Empty | Roots::Unresponsive | Roots::Failing => {
+                ClientCapabilities::builder().enable_roots().build()
+            }
         };
         ClientInfo::new(capabilities, Implementation::new("kineprism-test", "1"))
     }
 
-    fn list_roots(
+    async fn list_roots(
         &self,
         _context: RequestContext<RoleClient>,
-    ) -> impl Future<Output = Result<ListRootsResult, rmcp::ErrorData>> {
-        let roots = self
-            .root_uri
-            .as_deref()
-            .map_or_else(Vec::new, |uri| vec![Root::new(uri)]);
-        std::future::ready(Ok(ListRootsResult::new(roots)))
+    ) -> Result<ListRootsResult, rmcp::ErrorData> {
+        match &self.roots {
+            Roots::Answer(uri) => Ok(ListRootsResult::new(vec![Root::new(uri.as_str())])),
+            Roots::Empty => Ok(ListRootsResult::new(Vec::new())),
+            Roots::NotSupported | Roots::Unresponsive => std::future::pending().await,
+            Roots::Failing => Err(rmcp::ErrorData::internal_error("roots unavailable", None)),
+        }
     }
 }
 
 async fn mcp_client(
     root: &Path,
 ) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
-    mcp_client_with_roots(root, Some(file_uri(root))).await
-}
-
-async fn mcp_client_without_roots(
-    root: &Path,
-) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
-    mcp_client_with_roots(root, None).await
+    mcp_client_with_roots(root, Roots::Answer(file_uri(root)), &[]).await
 }
 
 async fn mcp_client_with_roots(
-    root: &Path,
-    root_uri: Option<String>,
+    working_directory: &Path,
+    roots: Roots,
+    environment: &[(&str, &str)],
 ) -> Result<rmcp::service::RunningService<RoleClient, McpTestClient>, Box<dyn std::error::Error>> {
     let transport = TokioChildProcess::new(
         tokio::process::Command::new(env!("CARGO_BIN_EXE_kineprism")).configure(|command| {
-            command.arg("mcp").current_dir(root);
+            command
+                .arg("mcp")
+                .current_dir(working_directory)
+                .envs(environment.iter().copied());
         }),
     )?;
-    let client = McpTestClient { root_uri }.serve(transport).await?;
+    let client = McpTestClient { roots }.serve(transport).await?;
     Ok(client)
+}
+
+/// Calls `compare_ui_images`, failing instead of hanging when the server never replies.
+async fn call_compare(
+    client: &rmcp::service::RunningService<RoleClient, McpTestClient>,
+    arguments: &serde_json::Value,
+) -> Result<CallToolResult, Box<dyn std::error::Error>> {
+    let call = client.call_tool(
+        CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(arguments)),
+    );
+    Ok(tokio::time::timeout(Duration::from_secs(30), call).await??)
 }
 
 fn file_uri(path: &Path) -> String {
@@ -131,12 +157,8 @@ fn help_describes_the_public_arguments() {
 async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = TestDirectory::new();
-    let expected_path = directory.path().join("expected.png");
-    let actual_path = directory.path().join("actual.png");
     let output_directory = directory.path().join("output");
-    let expected = RgbaImage::from_pixel(8, 6, Rgba([20, 30, 40, 255]));
-    expected.save(&expected_path)?;
-    expected.save(&actual_path)?;
+    let mut arguments = equivalent_images(directory.path())?;
 
     let client = mcp_client(directory.path()).await?;
     let tools = client.list_all_tools().await?;
@@ -164,16 +186,7 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
         );
     }
 
-    let arguments = serde_json::json!({
-        "expected_path": expected_path,
-        "actual_path": actual_path,
-        "output_dir": output_directory,
-    });
-    let first = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(&arguments)),
-        )
-        .await?;
+    let first = call_compare(&client, &arguments).await?;
     assert!(!first.is_error.unwrap_or(false), "{first:?}");
     let response = first.content[0]
         .as_text()
@@ -197,11 +210,7 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
         serde_json::from_slice(&fs::read(output_directory.join("report.json"))?)?;
     assert_eq!(detailed_report["equivalent"], true);
 
-    let repeated = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(&arguments)),
-        )
-        .await?;
+    let repeated = call_compare(&client, &arguments).await?;
     assert_eq!(repeated.is_error, Some(true));
     assert!(
         repeated.content[0]
@@ -211,18 +220,8 @@ async fn mcp_compares_ui_images_within_roots_and_preserves_artifact_safety()
             .contains("already exists")
     );
 
-    let forced = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
-                &serde_json::json!({
-                    "expected_path": expected_path,
-                    "actual_path": actual_path,
-                    "output_dir": output_directory,
-                    "force": true,
-                }),
-            )),
-        )
-        .await?;
+    arguments["force"] = serde_json::json!(true);
+    let forced = call_compare(&client, &arguments).await?;
     assert!(!forced.is_error.unwrap_or(false), "{forced:?}");
     client.cancel().await?;
     Ok(())
@@ -245,17 +244,15 @@ async fn mcp_text_result_reports_metrics_and_findings() -> Result<(), Box<dyn st
     actual.save(&actual_path)?;
 
     let client = mcp_client(directory.path()).await?;
-    let result = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
-                &serde_json::json!({
-                    "expected_path": expected_path,
-                    "actual_path": actual_path,
-                    "output_dir": output_directory,
-                }),
-            )),
-        )
-        .await?;
+    let result = call_compare(
+        &client,
+        &serde_json::json!({
+            "expected_path": expected_path,
+            "actual_path": actual_path,
+            "output_dir": output_directory,
+        }),
+    )
+    .await?;
 
     assert!(!result.is_error.unwrap_or(false), "{result:?}");
     let response = result.content[0]
@@ -279,28 +276,13 @@ async fn mcp_text_result_reports_metrics_and_findings() -> Result<(), Box<dyn st
 }
 
 #[tokio::test]
-async fn mcp_uses_its_working_directory_when_the_client_supplies_no_roots()
+async fn mcp_uses_its_working_directory_when_the_client_does_not_support_roots()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = TestDirectory::new();
-    let expected_path = directory.path().join("expected.png");
-    let actual_path = directory.path().join("actual.png");
-    let output_directory = directory.path().join("output");
-    let image = RgbaImage::from_pixel(8, 6, Rgba([20, 30, 40, 255]));
-    image.save(&expected_path)?;
-    image.save(&actual_path)?;
+    let arguments = equivalent_images(directory.path())?;
 
-    let client = mcp_client_without_roots(directory.path()).await?;
-    let result = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
-                &serde_json::json!({
-                    "expected_path": expected_path,
-                    "actual_path": actual_path,
-                    "output_dir": output_directory,
-                }),
-            )),
-        )
-        .await?;
+    let client = mcp_client_with_roots(directory.path(), Roots::NotSupported, &[]).await?;
+    let result = call_compare(&client, &arguments).await?;
 
     assert!(!result.is_error.unwrap_or(false), "{result:?}");
     let response = result.content[0]
@@ -309,10 +291,69 @@ async fn mcp_uses_its_working_directory_when_the_client_supplies_no_roots()
         .text
         .as_str();
     assert!(response.starts_with("Comparison: equivalent"), "{response}");
-    assert!(output_directory.join("report.json").is_file());
+    assert!(directory.path().join("output/report.json").is_file());
 
     client.cancel().await?;
     Ok(())
+}
+
+#[tokio::test]
+async fn mcp_rejects_calls_when_a_roots_capable_client_fails_to_list_roots()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_roots_rejection(Roots::Failing, &[], "roots unavailable").await
+}
+
+#[tokio::test]
+async fn mcp_rejects_calls_when_a_roots_capable_client_never_lists_roots()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_roots_rejection(
+        Roots::Unresponsive,
+        &[("KINEPRISM_MCP_ROOTS_TIMEOUT_MS", "200")],
+        "200 ms timeout",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn mcp_rejects_calls_when_a_roots_capable_client_lists_no_roots()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_roots_rejection(Roots::Empty, &[], "listed no workspace roots").await
+}
+
+/// Asserts that a comparison inside the server's working directory is rejected, without writing
+/// artifacts, because the client's roots could not be determined.
+async fn assert_roots_rejection(
+    roots: Roots,
+    environment: &[(&str, &str)],
+    expected_message: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let directory = TestDirectory::new();
+    let arguments = equivalent_images(directory.path())?;
+
+    let client = mcp_client_with_roots(directory.path(), roots, environment).await?;
+    let result = call_compare(&client, &arguments).await?;
+
+    assert_eq!(result.is_error, Some(true), "{result:?}");
+    let message = &result.content[0].as_text().expect("error text").text;
+    assert!(message.contains(expected_message), "{message}");
+    assert!(!directory.path().join("output").exists());
+
+    client.cancel().await?;
+    Ok(())
+}
+
+/// Writes two identical PNGs into `directory` and returns matching tool arguments.
+fn equivalent_images(directory: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let expected_path = directory.join("expected.png");
+    let actual_path = directory.join("actual.png");
+    let image = RgbaImage::from_pixel(8, 6, Rgba([20, 30, 40, 255]));
+    image.save(&expected_path)?;
+    image.save(&actual_path)?;
+    Ok(serde_json::json!({
+        "expected_path": expected_path,
+        "actual_path": actual_path,
+        "output_dir": directory.join("output"),
+    }))
 }
 
 #[tokio::test]
@@ -325,17 +366,15 @@ async fn mcp_rejects_paths_outside_workspace_roots() -> Result<(), Box<dyn std::
     RgbaImage::new(2, 2).save(&expected_path)?;
 
     let client = mcp_client(root.path()).await?;
-    let result = client
-        .call_tool(
-            CallToolRequestParams::new("compare_ui_images").with_arguments(json_object(
-                &serde_json::json!({
-                    "expected_path": expected_path,
-                    "actual_path": actual_path,
-                    "output_dir": root.path().join("output"),
-                }),
-            )),
-        )
-        .await?;
+    let result = call_compare(
+        &client,
+        &serde_json::json!({
+            "expected_path": expected_path,
+            "actual_path": actual_path,
+            "output_dir": root.path().join("output"),
+        }),
+    )
+    .await?;
 
     assert_eq!(result.is_error, Some(true));
     assert!(

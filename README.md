@@ -77,6 +77,9 @@ An npm-based MCP configuration is:
 }
 ```
 
+Tool paths must lie within the client's MCP roots, or the server's working directory if the client
+doesn't support roots. If a roots-capable client lists none or fails to answer, the call errors.
+
 ## Results
 
 The command writes a JSON report to stdout and to `report.json` in the output directory. It also

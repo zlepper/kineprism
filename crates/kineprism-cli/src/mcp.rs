@@ -6,15 +6,16 @@
 use std::{
     fmt::Write as _,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use kineprism_core::{Bounds, CompareOptions, Difference};
 use rmcp::{
     RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{CallToolResult, ContentBlock, Root},
+    model::{CallToolResult, ClientResult, ContentBlock, ListRootsRequest, Root, ServerRequest},
     schemars,
-    service::RequestContext,
+    service::{Peer, PeerRequestOptions, RequestContext, ServiceError},
     tool, tool_handler, tool_router,
     transport::stdio,
 };
@@ -100,11 +101,7 @@ impl ImageDiffServer {
         Parameters(request): Parameters<CompareUiImagesRequest>,
         context: RequestContext<RoleServer>,
     ) -> CallToolResult {
-        let roots = match context.peer.list_roots().await {
-            Ok(result) if !result.roots.is_empty() => canonical_root_paths(&result.roots),
-            Ok(_) | Err(_) => working_directory_root(),
-        };
-        let roots = match roots {
+        let roots = match workspace_roots(&context.peer).await {
             Ok(roots) => roots,
             Err(error) => return tool_error(error),
         };
@@ -127,7 +124,7 @@ impl ImageDiffServer {
 #[tool_handler(
     router = self.tool_router,
     name = "kineprism",
-    instructions = "Use compare_ui_images to compare PNG screenshots of user interfaces. All paths must be absolute and under an MCP workspace root, or under the server's working directory when the client supplies no roots."
+    instructions = "Use compare_ui_images to compare PNG screenshots of user interfaces. All paths must be absolute and under an MCP workspace root, or under the server's working directory when the client does not support roots."
 )]
 impl ServerHandler for ImageDiffServer {}
 
@@ -135,6 +132,56 @@ pub(crate) async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>
     let service = ImageDiffServer::new().serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
+}
+
+/// How long a roots-capable client gets to answer `roots/list` before the tool call fails.
+const ROOTS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Resolves the directories tool paths must stay within.
+///
+/// `roots/list` is only sent to clients that advertised the roots capability. Such a client that
+/// fails to answer, or lists no roots, causes an error rather than a fallback, so the access
+/// boundary is never wider than the client intended.
+async fn workspace_roots(peer: &Peer<RoleServer>) -> Result<Vec<PathBuf>, String> {
+    let supports_roots = peer
+        .peer_info()
+        .is_some_and(|info| info.capabilities.roots.is_some());
+    if !supports_roots {
+        return working_directory_root();
+    }
+
+    let timeout = roots_request_timeout();
+    let response = peer
+        .send_request_with_option(
+            ServerRequest::ListRootsRequest(ListRootsRequest::default()),
+            PeerRequestOptions::with_timeout(timeout),
+        )
+        .await
+        .map_err(|error| format!("could not request the MCP workspace roots: {error}"))?
+        .await_response()
+        .await;
+    match response {
+        Ok(ClientResult::ListRootsResult(result)) if result.roots.is_empty() => {
+            Err("the MCP client listed no workspace roots, so no paths are accessible".to_owned())
+        }
+        Ok(ClientResult::ListRootsResult(result)) => canonical_root_paths(&result.roots),
+        Ok(_) => Err("the MCP client answered roots/list with an unexpected response".to_owned()),
+        Err(ServiceError::Timeout { .. }) => Err(format!(
+            "the MCP client did not list its workspace roots before the {} ms timeout",
+            timeout.as_millis()
+        )),
+        Err(error) => Err(format!(
+            "the MCP client failed to list its workspace roots: {error}"
+        )),
+    }
+}
+
+/// `KINEPRISM_MCP_ROOTS_TIMEOUT_MS` overrides the timeout so tests need not wait for the default.
+fn roots_request_timeout() -> Duration {
+    std::env::var("KINEPRISM_MCP_ROOTS_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .map_or(ROOTS_REQUEST_TIMEOUT, Duration::from_millis)
 }
 
 fn tool_error(message: String) -> CallToolResult {
